@@ -3,6 +3,9 @@ import numpy as np
 from fus_anes.tci.tci import TCI
 
 class TCI_Ketamine(TCI):
+    '''
+    https://github.com/StevenLShafer/stanpumpR/blob/master/R/drugs_ketamine.R
+    '''
     def __init__(self,
                  **kw,
                  ):
