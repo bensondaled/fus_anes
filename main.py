@@ -1,8 +1,9 @@
 ##
-from controller import Controller
 from PyQt5 import QtWidgets
-from fus_anes.util import setup_logging
 import sys
+
+from fus_anes.util import setup_logging
+from fus_anes.experiments import Controller
 
 if __name__ == '__main__':
     setup_logging()
