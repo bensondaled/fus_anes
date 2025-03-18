@@ -1,5 +1,7 @@
+from fus_anes.hardware.eeg_cap_keys import *
+
 # Flags
-THREADS_ONLY = False
+THREADS_ONLY = True
 TESTING = True
 SIM_DATA = True
 
@@ -15,12 +17,9 @@ data_path = '/Users/bdd/data/fus_anes/'
 logging_file = '/Users/bdd/data/fus_anes/log.log'
 
 # EEG acquisition
-chan_reference = passive_reference_electrode_idx 
-eeg_key = BCA_SL_32
-eeg_init_chan_selects = [passive_eeg_frontal, passive_eeg_posterior]
 fs = 500 # Hz
 eeg_n_timefields = 4
-chan_reference = 18 # 0-indexed
+chan_reference = passive_reference_electrode_idx 
 eeg_memory_length = 5000 # samples
 read_buffer_length = 25 # samples
 eeg_key = BCA_SL_32
@@ -58,7 +57,7 @@ audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 cam_hdf_resize = 360
 audio_hdf_resize = audio_save_chunk * 10
-audio_device_idx = 1 # use audio_probe script to identify mics
+audio_device_idx = 0 # use audio_probe script to identify mics
 n_audio_display = 0.5 # secs
 
 # TCI
