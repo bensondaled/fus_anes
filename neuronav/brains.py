@@ -8,7 +8,7 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 import nilearn
-from nilearn import datasets, plottingA
+from nilearn import datasets, plotting
 
 '''
 
@@ -27,6 +27,7 @@ regions = dict( # L, R
    rsc=[(-5, -50, 12), (5, -50, 12)], 
    md=[(-2, -12, 4), (2, -12, 4)],
    lc=[(-6, -37, -25), (6, -37, -25)],
+   s1=[(-48, -21, 50), (48, -21, 50)],
 )
 
 for region, coords in regions.items():
