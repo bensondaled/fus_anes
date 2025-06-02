@@ -123,88 +123,137 @@ from scipy.optimize import minimize
 
 # ok good, now use this code here to create a new version of "compute rate to reach target in specified time"
 
-def rate_for_target(target_level,
-                    target_time,
+def rate_for_target(target_levels,
+                    target_durations,
                     tci_obj,
-                    instruction_interval=10.0,
-                    sim_resolution=0.200,
-                    stability_lookahead_max=60.0*5,
-                    stability_weight=0.5):
+                    instruction_interval=15.0,
+                    sim_resolution=1.0,
+                    ):
     '''This is meant for targets at some degree of steady state. boluses are still best computed using compute_bolus_to_reach_ce
 
     Target level: ce goal
-    Target time: secs from now
+    Target time: secs from LAST target
     Instruction interval: secs between rate changes
-    Sim reslution: time steps of sim (remember small is important because boluses can be so fast)
-    Stability lookahead_max: the MAX time (in seconds) at which to compute forward-looking stability
-    Stability weight: higher means more emphasis on making curve flat at end; 0 means doesn't matter
-
+    Sim resolution: time steps of sim (remember small is important because boluses can be so fast)
     '''
     max_rate = 1000 * config.max_rate * config.drug_mg_ml / config.weight # in mcg/kg/min
-
-    ttimes = np.arange(0, target_time+1, instruction_interval)
-    if ttimes[-1] != target_time:
-        ttimes = np.append(ttimes, target_time)
+    
+    # this is a special step that adds 1 extra interval on so it doesnt get lazy with final instruction
+    target_durations = np.append(target_durations, instruction_interval)
+    target_levels = np.append(target_levels, target_levels[-1])
+    
+    # expand out the range of time over which we'll be simulating into uniform chunks that will be able to have instruction changes
+    end_target_time = np.sum(target_durations)
+    ttimes = np.arange(0, end_target_time+1, instruction_interval)
+    if ttimes[-1] != end_target_time:
+        ttimes = np.append(ttimes, end_target_time)
+    
     durations = np.diff(ttimes)
+    
+    # prepare which of the expanded simulated values actually get evaluated for accuracy
+    evaluation_indices = [np.argmin(np.abs(np.cumsum(durations) - td)) for td in np.cumsum(target_durations)]
+    evaluation_indices = [ei for i,ei in enumerate(evaluation_indices) if target_levels[i] is not None]
+    evaluation_values = [ev for ev in target_levels if ev is not None]
 
-    def simulation_error(rates, target, duration, tci_obj):
-        # incorporate the lookahead step - 1 step into future where nothing gets changed
-        rates = np.append(rates, rates[-1])
-        duration = np.append(duration, stability_lookahead_max)
-        nsamp = int(round(stability_lookahead_max / sim_resolution))
+    def simulation_error(rates, eval_targets, eval_idxs, durations, tci_obj):
+        traj = simulate(tci_obj,
+                        infusion=rates,
+                        dur=durations,
+                        bolus=None,
+                        sim_resolution=sim_resolution,
+                        report_resolution='dur',
+                        report_fxn=lambda x: x[-1])
 
-        traj = simulate(tci_obj, infusion=rates, dur=duration, bolus=None, sim_resolution=sim_resolution)
-        reached = traj[-nsamp] # the end of the instruction set - everything after is the lookahead
-
-        stability_error = np.sum((traj[-nsamp+1:] - reached)**2) / target # I normalize by target because it empirically seems to work better 
-
-        error_target = np.abs(reached - target)
-        error = error_target + stability_weight * stability_error
+        traj_eval = traj[eval_idxs]
+        error = np.abs(traj_eval - eval_targets)
+        error = np.sum(error)
 
         return error
 
-    # realistic check: checks if most extreme action would get you to goal
+    ''' 
+    # realistic check: checks if most extreme action would get you to goal (right now checks last target only)
     unrealistic = False
-    if target_level < tci_obj.ce:
-        end = simulate(tci_obj, infusion=0, dur=target_time)[-1]
-        unrealistic = end > target_level + 0.05
-    elif target_level > tci_obj.ce:
-        end = simulate(tci_obj, infusion=max_rate, dur=target_time)[-1]
-        unrealistic = end < target_level - 0.05
+    last_target = evaluation_values[-1]
+    if last_target < tci_obj.ce:
+        end = simulate(tci_obj, infusion=0, dur=end_target_time)[-1]
+        unrealistic = end > last_target + 0.05
+    elif last_target > tci_obj.ce:
+        end = simulate(tci_obj, infusion=max_rate, dur=end_target_time)[-1]
+        unrealistic = end < last_target - 0.05
     if unrealistic:
         return None, None
+    '''
     
     initial_guess_rates = np.array([tci_obj.infusion_rate] * len(durations))
     opt = minimize(simulation_error,
                    initial_guess_rates,
                    method='L-BFGS-B',
-                   args=(target_level, durations, tci_obj),
-                   options={},
+                   args=(evaluation_values, evaluation_indices, durations, tci_obj),
+                   options=dict(ftol=1e-5),
                    bounds=[(0, max_rate)])
 
-    return opt.x, durations
+    rates = opt.x
+    durs = durations
+    
+    # now cut off the special "laziness preventing" extra interval
+    rates = rates[:-1]
+    durs = durs[:-1]
+
+    return rates, durs
 
 
 
 t = TCI(age=age, weight=weight, height=height, sex=sex)
 
 vals = []
-t.bolus(30)
 
-# this is how you'd jump over to a new target
-rates, durs = rate_for_target(0.75, 60*4.0, t)
+# find a way to reach and then stay stable for a bit more time
+target_durations = [60*3, 20, 20, 20]
+target_levels = [0.2] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
 for r,d in zip(rates, durs):
     t.infuse(r)
     vals += collect_vals(t, dur=d)
 
-# then keep it steady state in 2min chunks - this is the way i've seen works best, short intervals aiming for the end to be accurate, without any stability requirement
-for _ in range(5):
-    rates, durs = rate_for_target(0.75, 60*2.0, t, instruction_interval=20.0, sim_resolution=0.5, stability_weight=0.0)
-    for r,d in zip(rates, durs):
-        t.infuse(r)
-        vals += collect_vals(t, dur=d)
+# now stay stable for a bunch of time
+target_durations = [15] * 24
+target_levels = [0.2] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
 
-vals += collect_vals(t, dur=10*60)
+# now reach new target and then stay stable for a bit more time
+target_durations = [60*3, 20, 20, 20]
+target_levels = [0.3] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
+
+# now stay stable again
+target_durations = [15] * 24
+target_levels = [0.3] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
+
+# now reach new target and then stay stable for a bit more time
+target_durations = [60*3, 20, 20, 20]
+target_levels = [0.1] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
+
+# now stay stable again
+target_durations = [15] * 24
+target_levels = [0.1] * len(target_durations)
+rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
 
 cp, ce = np.array(vals).T
 pl.figure()

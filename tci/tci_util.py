@@ -3,27 +3,29 @@ import numpy as np
 
 import fus_anes.config as config
 
-def simulation_error(rate, target, end_time, tci_obj):
-    reached = simulate()
-    error = reached - target
-    return error
 
-
-def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200):
+def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200, report_resolution=None, report_fxn=lambda x: x[-1]):
     '''Sim resolution being small is somewhat important because boluses run so fast that every few milliseconds count
-    '''
 
-    if isinstance(dur, (int, float)):
+    Report resolution: even if the sim is run at high resolution like 1ms per step, you can choose to aggregate values to any reported resolution.
+        if None: uses sim_resolution
+        if 'dur': uses the supplied dur (so gives one output for each dur given, corresponding to report_fxn of that duration)
+
+    Report fxn: consider np.mean, np.max/min, or a custom lambda x: x[-1], to use last value
+    '''
+    NUM = (int, float, np.int64, np.int32, np.int16, np.int8, np.float16, np.float32, np.float64)
+
+    if isinstance(dur, NUM):
         dur = [dur]
 
         if infusion is None:
             infusion = 0 # maybe consider nan and handling that later so it can keep its rate?
-        assert isinstance(infusion, (int, float))
+        assert isinstance(infusion, NUM)
         infusion = [infusion]
 
         if bolus is None:
             bolus = (0, 0)
-        assert isinstance(bolus[0], (int, float))
+        assert isinstance(bolus[0], NUM)
         bolus = [bolus]
     else:
         if infusion is None:
@@ -42,23 +44,30 @@ def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200):
 
     for _bolus, _infusion, _dur in zip(bolus, infusion, dur):
         _dur = int(round(_dur))
+
+        step_results = []
         
         # bolus
         if not (_bolus[0]==0 and _bolus[1]==0):
             bdur, bdose = _bolus
-            bdur = round(bdur, 1) # 100millisecond resolution hard-coded for bolus duration accuracy
+            bdur = round(bdur, 2) # 10millisecond resolution hard-coded for bolus duration accuracy
             obj.infuse(bdose)
-            for i in np.arange(0, bdur+sim_resolution, sim_resolution):
-                result.append(obj.level)
+            for _ in np.arange(0, bdur, sim_resolution):
+                step_results.append(obj.level)
                 obj.wait(sim_resolution)
                 elapsed += sim_resolution
 
         # infusion
         obj.infuse(_infusion)
         remaining = _dur - elapsed
-        for i in np.arange(0, remaining+sim_resolution, sim_resolution):
-            result.append(obj.level)
+        for _ in np.arange(0, remaining, sim_resolution):
             obj.wait(sim_resolution)
+            step_results.append(obj.level)
+
+        if report_resolution is None:
+            result += step_results
+        elif report_resolution == 'dur':
+            result.append(report_fxn(step_results))
     
     return np.array(result)
 
