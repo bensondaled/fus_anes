@@ -1,4 +1,4 @@
-from fus_anes.hardware.eeg_cap_keys import *
+from fus_anes.constants import *
 
 # Flags
 THREADS_ONLY = True
@@ -72,6 +72,7 @@ max_bolus = 300 # mg
 max_rate = 25 # ml/min, 28.4 is manufacturer max
 min_rate = 0.005 # ml/min, 0.002 is manufacturer min
 hold_level_duration = 15*60 # secs
+drug_mg_ml = 10.0 # 10mg/ml for propofol
 
 # CO2
 capnostream_port = 'COM7' # Device manager: "USB Serial Port"

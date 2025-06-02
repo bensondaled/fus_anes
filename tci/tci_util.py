@@ -3,26 +3,63 @@ import numpy as np
 
 import fus_anes.config as config
 
-def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10):
+def simulation_error(rate, target, end_time, tci_obj):
+    reached = simulate()
+    error = reached - target
+    return error
+
+
+def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200):
+    '''Sim resolution being small is somewhat important because boluses run so fast that every few milliseconds count
+    '''
+
+    if isinstance(dur, (int, float)):
+        dur = [dur]
+
+        if infusion is None:
+            infusion = 0 # maybe consider nan and handling that later so it can keep its rate?
+        assert isinstance(infusion, (int, float))
+        infusion = [infusion]
+
+        if bolus is None:
+            bolus = (0, 0)
+        assert isinstance(bolus[0], (int, float))
+        bolus = [bolus]
+    else:
+        if infusion is None:
+            infusion = [0] * len(dur)
+        if bolus is None:
+            bolus = [(0,0)] * len(dur)
+
+    assert isinstance(dur, (list, tuple, np.ndarray))
+    assert isinstance(infusion, (list, tuple, np.ndarray))
+    assert isinstance(bolus[0], (list, tuple, np.ndarray))
+
     obj = copy.deepcopy(tci_obj)
-    dur = int(round(dur))
+
     result = []
-    
-    # bolus
-    if not (bolus[0]==0 and bolus[1]==0):
-        bdur, bdose = bolus
-        bdur = int(round(bdur))
-        obj.infuse(bdose)
-        for i in range(bdur):
+    elapsed = 0
+
+    for _bolus, _infusion, _dur in zip(bolus, infusion, dur):
+        _dur = int(round(_dur))
+        
+        # bolus
+        if not (_bolus[0]==0 and _bolus[1]==0):
+            bdur, bdose = _bolus
+            bdur = round(bdur, 1) # 100millisecond resolution hard-coded for bolus duration accuracy
+            obj.infuse(bdose)
+            for i in np.arange(0, bdur+sim_resolution, sim_resolution):
+                result.append(obj.level)
+                obj.wait(sim_resolution)
+                elapsed += sim_resolution
+
+        # infusion
+        obj.infuse(_infusion)
+        remaining = _dur - elapsed
+        for i in np.arange(0, remaining+sim_resolution, sim_resolution):
             result.append(obj.level)
-            obj.wait(1)
-
-    # infusion
-    obj.infuse(infusion)
-    for i in range(max(0, dur - len(result))):
-        result.append(obj.level)
-        obj.wait(1)
-
+            obj.wait(sim_resolution)
+    
     return np.array(result)
 
 def bolus_to_infusion(dose):

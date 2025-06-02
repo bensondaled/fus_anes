@@ -40,20 +40,25 @@ for region, coords in regions.items():
     display = plotting.plot_stat_map(template_img,
                                      display_mode='ortho',
                                      cut_coords=mean,
-                                     cmap='grey',
+                                     cmap='Reds',
                                      colorbar=False,
-                                     radiological=True,)
+                                     draw_cross=False, # note
+                                     annotate=False,
+                                     radiological=True,
+                                     )
 
+    '''
     display.add_markers(coords,
                         marker_color='orange',
                         marker_size=75,
                         marker='o',
                         facecolor='none',
                         alpha=0.5)
+    '''
 
 
     fig = pl.gcf()
-    fig.savefig(f'/Users/bdd/Desktop/{region}.pdf')
+    fig.savefig(f'/Users/bdd/Desktop/{region}.jpg', dpi=300)
     pl.close(fig)
 
 ##
