@@ -141,6 +141,7 @@ def rate_for_target(target_level,
 
     '''
     max_rate = 1000 * config.max_rate * config.drug_mg_ml / config.weight # in mcg/kg/min
+
     ttimes = np.arange(0, target_time+1, instruction_interval)
     if ttimes[-1] != target_time:
         ttimes = np.append(ttimes, target_time)
