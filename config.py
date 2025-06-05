@@ -7,8 +7,8 @@ SIM_DATA = True
 
 # Subject
 subject_id = 'p005'
-age = 33
-weight = 75.0
+age = 40
+weight = 70.0
 height = 180.0
 sex = 'm'
 

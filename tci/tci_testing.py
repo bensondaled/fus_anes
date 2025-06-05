@@ -2,6 +2,7 @@
 import fus_anes.config as config
 from fus_anes.tci import TCI_Propofol as TCI
 from fus_anes.tci.tci_util import compute_bolus_to_reach_ce, bolus_to_infusion, hold_at_level, simulate
+import copy
 
 age = config.age
 weight = config.weight # kg
@@ -41,104 +42,27 @@ pl.legend()
 pl.grid(True)
 '''
 
-# Test #2: ensuring the tools work
-'''
-t = TCI(age=age, weight=weight, height=height, sex=sex)
-vals = []
 
-# bolus to infusion
-b = compute_bolus_to_reach_ce(t, 5.0, initial_guess=1.0*weight)
-s, d = bolus_to_infusion(b)
-t.infuse(d)
-vals += collect_vals(t, dur=s)
-t.infuse(0)
-    
-# infusion target
-#rate = compute_infusion_rate_for_target(t, 3.0, 30.0)
-#t.infuse(rate)
-#vals += collect_vals(t, dur=30)
-#t.infuse(0)
-#vals += collect_vals(t, dur=10*60)
-
-# hold at level
-resolution = 15
-steps = hold_at_level(t, 3.0, 30*60, resolution=resolution, initial_guess=75, foresight=4)
-for step in steps:
-    t.infuse(step)
-    vals += collect_vals(t, dur=resolution)
-t.infuse(0)
-vals += collect_vals(t, dur=10*60)
-
-cp, ce = np.array(vals).T
-pl.figure()
-pl.plot(np.arange(len(ce))/60, ce)
-'''
-
-# Test #3: checking infusion protocols
-'''
-initial_bolus_ce = 5.0
-bfr = 0.0
-target_vals = [3.0, 0.0]
-target_durations = [60*30, 60*20]
-tp = TCIProtocol(
-                 model_params=dict(age=age,
-                                   weight=weight,
-                                   height=height,
-                                   sex=sex),
-                 initial_bolus_ce=initial_bolus_ce,
-                 bolus_refractory_period=bfr, # secs
-                 target_values=target_vals,
-                 target_durations=target_durations,
-                 resolution=15, # secs,
-                 foresight=4, # secs
-        )
-tp.generate()
-    
-# check what instructions produce
-tci = TCI(age=age, weight=weight, height=height, sex=sex)
-vals = []
-for _,ins in tp.instructions.iterrows():
-    if ins.kind == 0:
-        # bolus, given as infusion
-        dur, rate = bolus_to_infusion(ins.dose)
-        tci.infuse(rate)
-        vals += collect_vals(tci, dur=dur)
-        tci.infuse(0)
-        # hold for specified duration
-        d = ins.target_dur - dur
-        vals += collect_vals(tci, d)
-
-    elif ins.kind == 1:
-        tci.infuse(ins.dose)
-        vals += collect_vals(tci, ins.target_dur)
-
-cp, ce = np.array(vals).T
-#pl.figure()
-pl.plot(np.arange(len(vals))/60, cp, color='grey', ls=':')
-pl.plot(np.arange(len(vals))/60, ce, color='k', ls='-')
-'''
-
-# Test #4: sandbox for new optimization
+# Test #2: sandbox for new optimization
 from scipy.optimize import minimize
 
-# ok good, now use this code here to create a new version of "compute rate to reach target in specified time"
+def compute_optimal_rates(target_levels,
+                          target_durations,
+                          tci_obj,
+                          instruction_interval=15.0,
+                          sim_resolution=1.0,
+                          ):
+    '''This function has the strict goal of simultaneously optimizing a series of consecutive infusion rates, in order to minimize the error of reaching each target supplied at each duration supplied.
 
-def rate_for_target(target_levels,
-                    target_durations,
-                    tci_obj,
-                    instruction_interval=15.0,
-                    sim_resolution=1.0,
-                    ):
-    '''This is meant for targets at some degree of steady state. boluses are still best computed using compute_bolus_to_reach_ce
-
-    Target level: ce goal
-    Target time: secs from LAST target
-    Instruction interval: secs between rate changes
-    Sim resolution: time steps of sim (remember small is important because boluses can be so fast)
+    Target levels: ce goals
+    Target durations: secs from LAST target
+    Instruction interval: secs between rate changes (does NOT necessarily need to correspond to target durations in any way - rather this determines the spacing of uniform instructions that will be made)
+    Sim resolution: time resolution of internal simulation used to compute results, in secs
     '''
     max_rate = 1000 * config.max_rate * config.drug_mg_ml / config.weight # in mcg/kg/min
     
     # this is a special step that adds 1 extra interval on so it doesnt get lazy with final instruction
+    # it inherently assumes you'll want to stay where you ended
     target_durations = np.append(target_durations, instruction_interval)
     target_levels = np.append(target_levels, target_levels[-1])
     
@@ -169,20 +93,6 @@ def rate_for_target(target_levels,
         error = np.sum(error)
 
         return error
-
-    ''' 
-    # realistic check: checks if most extreme action would get you to goal (right now checks last target only)
-    unrealistic = False
-    last_target = evaluation_values[-1]
-    if last_target < tci_obj.ce:
-        end = simulate(tci_obj, infusion=0, dur=end_target_time)[-1]
-        unrealistic = end > last_target + 0.05
-    elif last_target > tci_obj.ce:
-        end = simulate(tci_obj, infusion=max_rate, dur=end_target_time)[-1]
-        unrealistic = end < last_target - 0.05
-    if unrealistic:
-        return None, None
-    '''
     
     initial_guess_rates = np.array([tci_obj.infusion_rate] * len(durations))
     opt = minimize(simulation_error,
@@ -201,65 +111,110 @@ def rate_for_target(target_levels,
 
     return rates, durs
 
+def go_to_target(tci_obj, target,
+                 delta_thresh=0.05,
+                 new_target_travel_time=1*60.0,
+                 duration=60*6,
+                 step_resolution=15.0):
+    '''This function uses compute_optimal_rates internally in order to create a plan for reaching and maintaining a target. It determines how as follows:
+
+    - If the new target appears to be a change, we set a goal to jump there
+    - If the new target appears to be stable, we just compute more timesteps for it
+
+    In all cases, we return instructions for the total duration we want all these instructions to go for (once reaching target, we hold stable until duration is done)
+
+    target: ce level
+    delta_thresh: what ce change from current is considered different enough to be a "new" level
+    new_target_travel_time: seconds dedicated to reaching new target before staying
+    duration: total seconds of all instructions returned combined
+    step_resolution: of instructions returned
+
+    It's in some sense a wrapper to compute_optimal_rates bc that's what does all the work, but using that function directly can take very long if you don't specify reasonable instruction sets (eg if you try to optimize for a 15-minute period all in one big step; because that function is a pure optimizer with no knowledge of practical goals. So this breaks it into feasible and realistic steps.
+    '''
 
 
+    current_level = tci_obj.level
+    delta = target - current_level
+
+    time_used = 0
+    all_rates = []
+    all_durs = []
+
+    # Step 1: only if new level is a jump: we aim to get there in the specified time, then hold for a minute, which helps ensure stability when we arrive.
+    if np.abs(delta) > 0.05:
+
+        assert new_target_travel_time + 1 <= duration, 'Didnt allow enough time to travel to destination, need travel_time+1 total duration at minimum, in order to get there and hold stable'
+
+        # in this approach for a new target, we give travel_time to get there, then ensure a minute of stability as part of the optimization
+        n_res_to_1min = int(60.0 // step_resolution)
+        target_durations = [new_target_travel_time] + [step_resolution]*n_res_to_1min
+        target_levels = [target] * len(target_durations)
+        rates, durs = compute_optimal_rates(target_levels,
+                                            target_durations,
+                                            tci_obj,
+                                            instruction_interval=step_resolution,
+                                            )
+
+        time_used += np.sum(durs)
+        all_rates.append(rates)
+        all_durs.append(durs)
+
+        # implement these steps in simulation
+        _, tci_obj = simulate(tci_obj,
+                              infusion=rates,
+                              dur=durs,
+                              return_sim_object=True)
+    
+    # Step 2: the stability step (sometimes this is all this function is for) - it just breaks the task of holding steady into small step_resolution-sized chunks of holding steady (and note we didnt have to match the time resolution of these steps with the time resolution for compute_optimal_rates, but we do for convenience). The point is that if you just say "hold steady at this level for 10 mins" directly to compute_optimal_rates, it could give you tons of oscillations in the middle between time 0 and 10. This wrapping of it in small steps is (a) more efficienct, and (b) ensures that every few seconds we're still optimzing to be steady at that level.
+    time_remaining = duration - time_used
+    stability_nsteps = int(time_remaining // step_resolution)
+    target_durations = [step_resolution] * stability_nsteps
+
+    target_levels = [target] * len(target_durations)
+    rates, durs = compute_optimal_rates(target_levels,
+                                        target_durations,
+                                        tci_obj,
+                                        instruction_interval=step_resolution
+                                        )
+    all_rates.append(rates)
+    all_durs.append(durs)
+
+    rates = np.concatenate(all_rates)
+    durs = np.concatenate(all_durs)
+    return rates, durs
+
+##
+'''NOTES
+This is working amazingly well. The next step is to make a class that handles realtime management. So it should first allow designing a plan like a walkup, but it should be able to be realtime-called and rapidly change course, specifically to hold at a given level. We'll achieve this by making a queue of upcoming instructions, which gets reset if user decides to at any point. And it'll dump very fast short-term instructions into that queue, then in the background prepare longer-term instructions and dump onto the back.
+'''
 t = TCI(age=age, weight=weight, height=height, sex=sex)
-
 vals = []
 
-# find a way to reach and then stay stable for a bit more time
-target_durations = [60*3, 20, 20, 20]
-target_levels = [0.2] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+def implement(t, rates, durs, vals):
+    for r,d in zip(rates, durs):
+        t.infuse(r)
+        vals += collect_vals(t, dur=d)
 
-# now stay stable for a bunch of time
-target_durations = [15] * 24
-target_levels = [0.2] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+rates, durs = go_to_target(t, 1.0, duration=5*60, new_target_travel_time=2*60)
+implement(t, rates, durs, vals)
 
-# now reach new target and then stay stable for a bit more time
-target_durations = [60*3, 20, 20, 20]
-target_levels = [0.3] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+rates, durs = go_to_target(t, 1.1, duration=3*60)
+implement(t, rates, durs, vals)
 
-# now stay stable again
-target_durations = [15] * 24
-target_levels = [0.3] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+rates, durs = go_to_target(t, 1.2, duration=3*60)
+implement(t, rates, durs, vals)
 
-# now reach new target and then stay stable for a bit more time
-target_durations = [60*3, 20, 20, 20]
-target_levels = [0.1] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=20.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+rates, durs = go_to_target(t, 1.3, duration=3*60)
+implement(t, rates, durs, vals)
 
-# now stay stable again
-target_durations = [15] * 24
-target_levels = [0.1] * len(target_durations)
-rates, durs = rate_for_target(target_levels, target_durations, t, instruction_interval=15.0, sim_resolution=1.0)
-for r,d in zip(rates, durs):
-    t.infuse(r)
-    vals += collect_vals(t, dur=d)
+# now they LOR'd, so I dynamically say hey hold it here for 10 mins
+rates, durs = go_to_target(t, t.level, duration=5*60)
+implement(t, rates, durs, vals)
 
 cp, ce = np.array(vals).T
 pl.figure()
 #pl.plot(np.arange(len(cp))/60, cp, label='cp', color='gold', ls='--')
 pl.plot(np.arange(len(ce))/60, ce, label='ce', color='gold',)
-pl.legend()
-pl.grid(True)
+pl.legend(); pl.grid(True)
 ##
 

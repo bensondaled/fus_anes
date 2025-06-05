@@ -4,7 +4,7 @@ import numpy as np
 import fus_anes.config as config
 
 
-def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200, report_resolution=None, report_fxn=lambda x: x[-1]):
+def simulate(tci_obj, bolus=None, infusion=0, dur=10, sim_resolution=0.200, report_resolution=None, report_fxn=lambda x: x[-1], return_sim_object=False):
     '''Sim resolution being small is somewhat important because boluses run so fast that every few milliseconds count
 
     Report resolution: even if the sim is run at high resolution like 1ms per step, you can choose to aggregate values to any reported resolution.
@@ -69,6 +69,8 @@ def simulate(tci_obj, bolus=(0, 0), infusion=0, dur=10, sim_resolution=0.200, re
         elif report_resolution == 'dur':
             result.append(report_fxn(step_results))
     
+    if return_sim_object:
+        return np.array(result), obj
     return np.array(result)
 
 def bolus_to_infusion(dose):
