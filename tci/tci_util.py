@@ -1,9 +1,10 @@
 import copy
 import numpy as np
+from scipy.optimize import minimize
 
 import fus_anes.config as config
 
-
+##
 def simulate(tci_obj, bolus=None, infusion=0, dur=10, sim_resolution=0.200, report_resolution=None, report_fxn=lambda x: x[-1], return_sim_object=False):
     '''Sim resolution being small is somewhat important because boluses run so fast that every few milliseconds count
 
@@ -40,13 +41,15 @@ def simulate(tci_obj, bolus=None, infusion=0, dur=10, sim_resolution=0.200, repo
     obj = copy.deepcopy(tci_obj)
 
     result = []
-    elapsed = 0
+    elapsed = 0.0
 
     for _bolus, _infusion, _dur in zip(bolus, infusion, dur):
-        _dur = int(round(_dur))
-
         step_results = []
+
+        _dur = float(_dur)
+        _infusion = float(_infusion)
         
+        ''' plan to remove boluses enrtirely
         # bolus
         if not (_bolus[0]==0 and _bolus[1]==0):
             bdur, bdose = _bolus
@@ -56,6 +59,7 @@ def simulate(tci_obj, bolus=None, infusion=0, dur=10, sim_resolution=0.200, repo
                 step_results.append(obj.level)
                 obj.wait(sim_resolution)
                 elapsed += sim_resolution
+        '''
 
         # infusion
         obj.infuse(_infusion)
@@ -72,7 +76,7 @@ def simulate(tci_obj, bolus=None, infusion=0, dur=10, sim_resolution=0.200, repo
     if return_sim_object:
         return np.array(result), obj
     return np.array(result)
-
+##
 def bolus_to_infusion(dose):
     # dose in mg
     # convenience for calculating how a bolus is practically achieved as a temporary infusion
@@ -85,65 +89,6 @@ def bolus_to_infusion(dose):
     mcg_kg_min = mcg_min / config.weight
 
     return secs_required, mcg_kg_min
-
-def compute_infusion_rate_for_target(tci_obj, target, duration,
-                                     search_range=[0, 300],
-                                     initial_guess=None,
-                                     lamb=10,
-                                     error_tolerance=0.001,
-                                     max_iters=10000):
-    
-    # using the current state of tci_obj, return optimal rate to achieve target level by duration time from now
-    # if initial guess is None, use current infusion rate of tci_obj
-    error = 1e3
-    niters = 0
-    rate = initial_guess
-    if rate is None:
-        rate = tci_obj.infusion_rate
-    while abs(error) > error_tolerance:
-        outcome = simulate(tci_obj, (0,0), rate, duration)[-1]
-
-        error = outcome - target
-        rate = rate - lamb * error
-        #print(error, rate)
-
-        if rate >= search_range[1]:
-            rate = search_range[1]
-            break
-        if rate <= search_range[0]:
-            rate = search_range[0]
-            break
-
-        niters += 1
-        if niters > max_iters:
-            break
-    #print(niters)
-    return rate
-
-def hold_at_level(tci_obj, target, duration,
-                  resolution=30,
-                  foresight=1,
-                  **computation_kw):
-    # return list of infusion rates to hold tci_obj at target concentration 
-    # list will be at resolution in seconds for specified duration
-    # foresight: look n resolution-size steps into future, calculating optimal rate at each one, and take median of results. intuitively, this tradeoff is: lower will be a "short-term thinker" where you arrive fast at your target but are likely to overshoot; higher will be a "long-term thinker" where you are more steady in long-run but sacrifice the speed at which you get there
-    rates = []
-    computation_kw = computation_kw.copy()
-    computation_kw['initial_guess'] = computation_kw.pop('initial_guess', tci_obj.infusion_rate)
-
-    for step in np.arange(resolution, duration+resolution, resolution):
-        #print(computation_kw['initial_guess'])
-        test_dur = [resolution*i for i in range(1, foresight+1)]
-        rate = [compute_infusion_rate_for_target(tci_obj, target, duration=r, **computation_kw) for r in test_dur]
-        #print(computation_kw['initial_guess'])
-        #print(rate)
-        rate = np.median(rate)
-        rates.append(rate)
-        tci_obj = copy.deepcopy(tci_obj)
-        tci_obj.infuse(rate)
-        tci_obj.wait(resolution)
-        computation_kw['initial_guess'] = rate # for efficiency, helps tremendously
-    return rates
 
 def compute_bolus_to_reach_ce(tci_obj, target_ce, initial_guess=10, lookahead=60*5,
                               search_range=[0, 250], max_iters=10000, lamb=5, error_tolerance=0.1):
@@ -172,3 +117,41 @@ def compute_bolus_to_reach_ce(tci_obj, target_ce, initial_guess=10, lookahead=60
     #print(niters)
     return b_dose
 
+##
+def compute_bolus_to_reach_ce_2(tci_obj, target, max_dur=60*5):
+    
+    bolus_mg_min = config.bolus_rate * 10 # bc propofol 10mg/ml
+    bolus_mcg_min = bolus_mg_min * 1000
+    bolus_mcg_kg_min = bolus_mcg_min / config.weight
+    bolus_rate = bolus_mcg_kg_min
+
+    def err_fxn(bolus_duration, tci_obj, target_val):
+        bolus_duration = bolus_duration[0] # for minimize mechanics
+
+        durs = [bolus_duration, max_dur-bolus_duration]
+        rates = [bolus_rate, tci_obj.infusion_rate]
+
+        traj = simulate(tci_obj,
+                      infusion=rates,
+                      dur=durs,
+                      bolus=None,
+                      sim_resolution=0.050,
+                      report_resolution=None)
+        outcome = np.max(traj)
+        err = np.abs(outcome - target_val)
+        return err
+
+    initial_guess = np.array([5.0]) # giving secs of bolus time
+    opt = minimize(err_fxn,
+                   initial_guess,
+                   method='L-BFGS-B',
+                   args=(tci_obj, target),
+                   options=dict(eps=0.050, ftol=1e-20, gtol=1e-20),
+                   bounds=[(0.100, 60)]
+                   )
+
+    result = opt.x[0]
+    return result, bolus_rate
+
+
+##

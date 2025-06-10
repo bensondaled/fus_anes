@@ -15,7 +15,7 @@ class TCI():
         '''
         https://www.sciencedirect.com/science/article/pii/S0007091218300515?via%3Dihub#sec2
         '''
-        self.resolution_mult = 10 # 1 means 1-sec resolution, 10 means 100-msec (=1 decisecond)
+        self.resolution_mult = 20 # 1 means 1-sec resolution, 10 means 100-msec (=1 decisecond), 100 means 10-ms, 1000 means 1ms
     
         self.age = age
         self.sex = sex
@@ -44,7 +44,7 @@ class TCI():
             prior_ts = prior_tcm['ts']
             dt = int(round(now() - prior_ts))
             for _ in range(dt):
-                self.wait(1)
+                self.wait(1.0)
             return
 
         # starting values

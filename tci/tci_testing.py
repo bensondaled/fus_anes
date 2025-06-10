@@ -1,7 +1,8 @@
 ##
 import fus_anes.config as config
 from fus_anes.tci import TCI_Propofol as TCI
-from fus_anes.tci.tci_util import compute_bolus_to_reach_ce, bolus_to_infusion, hold_at_level, simulate
+from fus_anes.tci.tci_util import compute_bolus_to_reach_ce, bolus_to_infusion, simulate, compute_bolus_to_reach_ce_2
+from scipy.optimize import minimize
 import copy
 
 age = config.age
@@ -216,5 +217,18 @@ pl.figure()
 #pl.plot(np.arange(len(cp))/60, cp, label='cp', color='gold', ls='--')
 pl.plot(np.arange(len(ce))/60, ce, label='ce', color='gold',)
 pl.legend(); pl.grid(True)
+##
+
+t = TCI(age=age, weight=weight, height=height, sex=sex)
+d,r = compute_bolus_to_reach_ce_2(t, 4.5)
+print((d * r/60) * weight / 1000)
+y = compute_bolus_to_reach_ce(t, 2.0)
+
+vals = []
+rates = [r,0]
+durs = [d,60*5]
+for r,d in zip(rates, durs):
+    t.infuse(r)
+    vals += collect_vals(t, dur=d)
 ##
 
