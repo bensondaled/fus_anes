@@ -11,11 +11,13 @@ class TCI():
                  weight=config.weight,
                  height=config.height,
                  sex=config.sex,
+                 resolution=0.050,
                  prior_tcm=None):
         '''
         https://www.sciencedirect.com/science/article/pii/S0007091218300515?via%3Dihub#sec2
         '''
-        self.resolution_mult = 20 # 1 means 1-sec resolution, 10 means 100-msec (=1 decisecond), 100 means 10-ms, 1000 means 1ms
+        self.resolution = resolution # in seconds - smallest interval TCI can handle (useless to call wait() in smaller steps
+        self.resolution_mult = 1/self.resolution # 1 means 1-sec resolution, 10 means 100-msec (=1 decisecond), 100 means 10-ms, 1000 means 1ms
     
         self.age = age
         self.sex = sex
