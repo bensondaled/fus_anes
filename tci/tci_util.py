@@ -288,6 +288,8 @@ class LiveTCI(mp.Process):
                  saver=None,
                  new_instruction_delay=10.000, # longer is safer but also means waiting more to do things
                  history_interval=2.0,
+                 sim_duration=20*60,
+                 sim_interval=5.0,
                  **tci_kw):
         super(LiveTCI, self).__init__()
 
@@ -303,6 +305,11 @@ class LiveTCI(mp.Process):
         self.history_interval = history_interval
         self.history_request_flag = mp.Value('b', 0)
         self._history = mp.Queue()
+
+        self.sim_duration = sim_duration
+        self.sim_interval = sim_interval
+        self.simulation_request_flag = mp.Value('b', 0)
+        self._simulation = mp.Queue()
         
         self.clear_instruction_queue_flag = mp.Value('b', 0)
 
@@ -314,17 +321,26 @@ class LiveTCI(mp.Process):
     def level(self):
         self.level_request_flag.value = True
         while self.level_request_flag.value:
-            time.sleep(0.010)
+            time.sleep(0.005)
         return self._level.value
     
     @property
     def history(self):
         self.history_request_flag.value = True
         while self.history_request_flag.value:
-            time.sleep(0.010)
+            time.sleep(0.005)
         hist = self._history.get()
         htime = np.arange(len(hist)) * self.history_interval
         return htime, hist
+    
+    @property
+    def simulation(self):
+        self.simulation_request_flag.value = True
+        while self.simulation_request_flag.value:
+            time.sleep(0.005)
+        sim = self._simulation.get()
+        stime = np.arange(len(sim)) * self.sim_interval
+        return stime, sim
 
     def bolus(self, dose=None, ce=None):
         self.clear_instruction_queue()
@@ -400,12 +416,14 @@ class LiveTCI(mp.Process):
                 elif kind == 'goto':
                     target, kw = params
 
-                    kw['duration'] = kw.pop('duration', 3*60)
+                    kw['duration'] = kw.pop('duration', 4*60)
                     kw['new_target_travel_time'] = kw.pop('new_target_travel_time', 90.0)
 
-                    start_time = now()
                    
-                   self.infuse(self.tci.infusion_rate) # halt everything and keep infusing at current rate
+                    #self.infuse(self.tci.infusion_rate) # halt everything and keep infusing at current rate
+
+                    start_time = now()
+
                     _, sim_obj = simulate(self.tci, [self.tci.infusion_rate], [self.new_instruction_delay], return_sim_object=True) # because the coming calculation may take some time, increment some simulated time from which to start the whole operation, so that when we have our computation complete and ready to implement, it is happening from the correct starting conditions
                     rates, durs = go_to_target(sim_obj, target, **kw)
 
@@ -427,8 +445,27 @@ class LiveTCI(mp.Process):
                         self.instruction_queue.put(instruction)
                         cmd_time += dur
 
+                        # notice how the last duration is not incorporated into the instructions, ie it passes on info about when to start, but without any other steps, it will just continue that rate indefinitely
+
             except queue.Empty:
                 pass
+
+    def simulate(self, instructions):
+        i_rates, i_starts = zip(*instructions)
+
+        rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
+
+        starts = np.append(now(), i_starts)
+        durs = np.diff(starts)
+        remaining_time = self.sim_duration - np.sum(durs)
+        durs = np.append(durs, remaining_time)
+        durs[0] = max(durs[0], 0.002)
+        durs = np.array(durs).tolist()
+
+        sim = simulate(self.tci, rates, durs, sim_resolution=self.sim_interval, report_resolution=None)
+
+        self._simulation.put(sim)
+        self.simulation_request_flag.value = 0
 
     def run(self):
         self.pump = Pump()
@@ -463,6 +500,10 @@ class LiveTCI(mp.Process):
                 last_tci_cmd_time = now()
                 self._level.value = self.tci.level
                 self.level_request_flag.value = 0
+
+            # provide simulation if user requested it
+            if self.simulation_request_flag.value:
+                threading.Thread(target=self.simulate, args=(queued_instructions.copy(),), daemon=True).start()
 
             # then run the next step on the waiting list
             if len(queued_instructions) == 0:
