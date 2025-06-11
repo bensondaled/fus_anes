@@ -288,8 +288,8 @@ class LiveTCI(mp.Process):
                  saver=None,
                  new_instruction_delay=10.000, # longer is safer but also means waiting more to do things
                  history_interval=2.0,
-                 sim_duration=20*60,
-                 sim_interval=5.0,
+                 projection_duration=20*60,
+                 projection_interval=5.0,
                  **tci_kw):
         super(LiveTCI, self).__init__()
 
@@ -306,10 +306,10 @@ class LiveTCI(mp.Process):
         self.history_request_flag = mp.Value('b', 0)
         self._history = mp.Queue()
 
-        self.sim_duration = sim_duration
-        self.sim_interval = sim_interval
-        self.simulation_request_flag = mp.Value('b', 0)
-        self._simulation = mp.Queue()
+        self.projection_duration = projection_duration
+        self.projection_interval = projection_interval
+        self.projection_request_flag = mp.Value('b', 0)
+        self._projection = mp.Queue()
         
         self.clear_instruction_queue_flag = mp.Value('b', 0)
 
@@ -334,13 +334,13 @@ class LiveTCI(mp.Process):
         return htime, hist
     
     @property
-    def simulation(self):
-        self.simulation_request_flag.value = True
-        while self.simulation_request_flag.value:
+    def projection(self):
+        self.projection_request_flag.value = True
+        while self.projection_request_flag.value:
             time.sleep(0.005)
-        sim = self._simulation.get()
-        stime = np.arange(len(sim)) * self.sim_interval
-        return stime, sim
+        proj = self._projection.get()
+        ptime = np.arange(len(proj)) * self.projection_interval
+        return ptime, proj
 
     def bolus(self, dose=None, ce=None):
         self.clear_instruction_queue()
@@ -450,27 +450,28 @@ class LiveTCI(mp.Process):
             except queue.Empty:
                 pass
 
-    def simulate(self, instructions):
+    def project(self, instructions):
+        # TODO: make a simulation similar to projection but allows user to specify some hypothetical instructions when calling this (right now it just simulates out what will happen under the current directions)
+
         i_rates, i_starts = zip(*instructions)
 
         rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
 
         starts = np.append(now(), i_starts)
         durs = np.diff(starts)
-        remaining_time = self.sim_duration - np.sum(durs)
+        remaining_time = self.projection_duration - np.sum(durs)
         durs = np.append(durs, remaining_time)
         durs[0] = max(durs[0], 0.002)
         durs = np.array(durs).tolist()
 
-        sim = simulate(self.tci, rates, durs, sim_resolution=self.sim_interval, report_resolution=None)
+        proj = simulate(self.tci, rates, durs, sim_resolution=self.projection_interval, report_resolution=None)
 
-        self._simulation.put(sim)
-        self.simulation_request_flag.value = 0
+        self._projection.put(proj)
+        self.projection_request_flag.value = 0
 
     def run(self):
         self.pump = Pump()
         self.tci = TCI(**self.tci_kw)
-        self.simulated = [] 
 
         threading.Thread(target=self.process_user_requests, daemon=True).start()
         threading.Thread(target=self.keep_history, daemon=True).start()
@@ -501,9 +502,9 @@ class LiveTCI(mp.Process):
                 self._level.value = self.tci.level
                 self.level_request_flag.value = 0
 
-            # provide simulation if user requested it
-            if self.simulation_request_flag.value:
-                threading.Thread(target=self.simulate, args=(queued_instructions.copy(),), daemon=True).start()
+            # provide projection if user requested it
+            if self.projection_request_flag.value:
+                threading.Thread(target=self.project, args=(queued_instructions.copy(),), daemon=True).start()
 
             # then run the next step on the waiting list
             if len(queued_instructions) == 0:
@@ -536,3 +537,12 @@ class LiveTCI(mp.Process):
         self.kill_flag.value = 1
         while self._on.value:
             time.sleep(0.010)
+
+if __name__ == '__main__':
+    lt = LiveTCI()
+    lt.goto(0.4)
+
+    # and then when you want to try stuff:
+    pl.plot(*lt.history)
+
+    pl.plot(*lt.projection)
