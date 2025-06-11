@@ -31,7 +31,6 @@ class Controller():
         self.ui.t_hipass.editingFinished.connect(self.update_filters)
         self.ui.t_notch.editingFinished.connect(self.update_filters)
         self.ui.timeline_nav_lr.sigRegionChangeFinished.connect(self.drag_timeline_nav)
-        self.ui.b_reset_pump.clicked.connect(self.reset_pump)
         self.ui.b_reset_capnostream.clicked.connect(self.reset_capnostream)
         self.ui.b_reset_cam.clicked.connect(self.reset_cam)
         self.ui.b_aud_prep.clicked.connect(self.prepare_auditory_task)
@@ -489,12 +488,6 @@ class Controller():
         _lo.setText(str(_loval))
         _hi.setText(str(_hival))
 
-    def reset_pump(self, *args):
-        if not self.running:
-            return
-        if (not self.session) or (not self.session.running):
-            return
-        self.session.reset_pump()
     def reset_capnostream(self, *args):
         if not self.running:
             return

@@ -234,7 +234,6 @@ class Interface(qtw.QWidget):
         self.b_toggle_video = qtw.QPushButton('Toggle video/audio/CO2')
         red_palette = QPalette(*[QColor('red') for _ in range(9)])
         self.l_resets = qtw.QLabel('Resets:', palette=red_palette)
-        self.b_reset_pump = qtw.QPushButton('Pump', palette=red_palette)
         self.b_reset_capnostream = qtw.QPushButton('CO2', palette=red_palette)
         self.b_reset_cam = qtw.QPushButton('Cam/Mic', palette=red_palette)
         self.aud_select = qtw.QComboBox()
@@ -252,7 +251,6 @@ class Interface(qtw.QWidget):
                              self.b_toggle_raw, 1,
                              self.b_toggle_video,
                               50, self.l_resets, 1,
-                              self.b_reset_pump, 1,
                               self.b_reset_capnostream, 1,
                               self.b_reset_cam, 1,
                               ]

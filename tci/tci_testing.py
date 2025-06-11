@@ -1,9 +1,7 @@
 ##
 import fus_anes.config as config
 from fus_anes.tci import TCI_Propofol as TCI
-from fus_anes.tci.tci_util import bolus_to_infusion, simulate, compute_bolus_to_reach_ce, go_to_target
-from fus_anes.hardware import Pump
-import time
+from fus_anes.tci.tci_util import bolus_to_infusion, simulate, compute_bolus_to_reach_ce, go_to_target, mlmin_mcgkgmin
 
 age = config.age
 weight = config.weight # kg
@@ -67,13 +65,16 @@ pl.legend(); pl.grid(True)
 '''NOTES
 This is working amazingly well. The next step is to make a class that handles realtime management. So it should first allow designing a plan like a walkup, but it should be able to be realtime-called and rapidly change course, specifically to hold at a given level. We'll achieve this by making a queue of upcoming instructions, which gets reset if user decides to at any point. And it'll dump very fast short-term instructions into that queue, then in the background prepare longer-term instructions and dump onto the back.
 '''
-t = TCI(age=age, weight=weight, height=height, sex=sex)
+t = TCI(age=age, weight=weight, height=height, sex=sex)G
 vals = []
 
 def implement(t, rates, durs, vals):
     for r,d in zip(rates, durs):
         t.infuse(r)
         vals += collect_vals(t, dur=d)
+
+rates, durs = go_to_target(t, 0.5, duration=3*60)
+implement(t, rates, durs, vals)
 
 rates, durs = go_to_target(t, 1.0, duration=5*60, new_target_travel_time=2*60)
 implement(t, rates, durs, vals)
@@ -98,53 +99,4 @@ pl.plot(np.arange(len(ce))/60, ce, label='ce', color='gold',)
 pl.legend(); pl.grid(True)
 
 ## SANDBOX: toying with making LiveTCI
-import multiprocessing as mp
-class LiveTCI(mp.Process):
-    '''
-    Class that simultaneously handles infusion of a drug by being the overseer of both the TCI logic and the pump instructions
-
-    Much to work on here - primarily there's a few things this needs to do:
-    - handle the logic of just being asked to bolus or infuse something
-    - handle requests for simulated future
-    - handle requests for reaching targets, including allowing for lagged calculations but realtime implementations
-    '''
-    def __init__(self, **tci_kw):
-        super(LiveTCI, self).__init__()
-
-        self.pump = Pump() # TODO: note we are making the pump object here now
-        self.tci = TCI(**tci_kw)
-        self.simulated = [] # each time user asks for anything from object, will update this so it has entire history of what happened to this TCI
-        self.instruction_queue = mp.Queue() # stores what's planned next for the TCI
-        
-        self.kill_flag = mp.Value('b', 0)
-        self._on = mp.Value('b', 0)
-        self.start()
-
-    @property
-    def level(self):
-        return self.tci.level
-
-    def goto(self, target, **kw):
-        kw['duration'] = kw.pop('duration', 3*60)
-        kw['new_target_travel_time'] = kw.pop('new_target_travel_time', 1*60)
-        # TODO: somehow send this goal to the inside of the main process to get computed in a separate thread on the updated tci object, then implemented. you might sort of need two ongoing threads, one that's handling computations for things to add to the main instruction queue, and another just constantly checking the main instruction queue and implementing whatever is due
-        #rates, durs = go_to_target(t, target, **kw)
-    
-    def simulate(self):
-        return
-
-    def run(self):
-        while not self.kill_flag.value:
-            try:
-                rate, dur = self.instruction_queue.get(block=False)
-            except queue.Empty:
-                pass
-        
-        self.pump.end()
-        self._on = False
-    
-    def end(self):
-        self.kill_flag.value = 1
-        while self._on.value:
-            time.sleep(0.010)
 ##

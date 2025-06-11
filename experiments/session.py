@@ -200,10 +200,6 @@ class Session():
         del self.cam
         self.cam = Camera(f'{self.tech_name}_reset_{now()}', error_queue=self.error_queue)
 
-    def reset_pump(self):
-        del self.pump
-        self.pump = Pump(error_queue=self.error_queue, saver=self.saver)
-
     def reset_capnostream(self):
         del self.capnostream
         self.capnostream = Capnostream(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
