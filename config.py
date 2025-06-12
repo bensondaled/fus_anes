@@ -11,10 +11,17 @@ age = 40
 weight = 70.0
 height = 180.0
 sex = 'm'
+name = 'andy'
 
 # Paths
 data_path = '/Users/bdd/data/fus_anes/'
 logging_file = '/Users/bdd/data/fus_anes/log.log'
+
+# Verbal instructions
+verbal_instructions_path = '/Users/bdd/data/fus_anes/'
+verbal_instruction_interval = 0.5, (3.0, 1.5) # secs: min, (mean, sd)
+verbal_instruction_command = 'squeeze'
+verbal_instructions_n_prepare = 120
 
 # EEG acquisition
 fs = 500 # Hz
