@@ -11,7 +11,7 @@ from psychopy.core import wait
 
 # TODO: incorporate saver
 
-class VerbalInstructions():
+class SqueezeInstructions():
     def __init__(self):
         self.name = config.name.lower()
         self.audio_path = os.path.join(config.verbal_instructions_path, self.name)
@@ -53,9 +53,31 @@ class VerbalInstructions():
     def end(self):
         self.kill_flag = True
 
-if __name__ == '__main__':
-    vi = VerbalInstructions()
-    vi.play()
+class BaselineEyes():
+    def __init__(self, names=['closed.mp3', 'open.mp3'], n_reps=2, dur=60.0):
+        self.clip_paths = [os.path.join(config.baseline_audio_path, name) for name in names]
+        self.n_reps = n_reps
+        self.dur = dur
+    
+    def play(self):
+        threading.Thread(target=self._play, daemon=True).start()
 
+    def _play(self):
+        paths = np.repeat(self.clip_paths, self.n_reps)
+        np.random.shuffle(paths)
+
+        for path in paths:
+            s = Sound(path)
+            dur = s.getDuration()
+            s.play()
+            wait(dur)
+            wait(self.dur)
+
+if __name__ == '__main__':
+    vi = SqueezeInstructions()
+    vi.play()
     #vi.end()
+
+    bl = BaselineEyes()
+    bl.play()
 ##

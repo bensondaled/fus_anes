@@ -9,8 +9,13 @@ import bisect
 
 import fus_anes.config as config
 from fus_anes.hardware import Pump
-from fus_anes.tci import TCI_Propofol as TCI
+from fus_anes.tci import TCI_Propofol, TCI_Ketamine
 from fus_anes.util import now, now2
+
+if config.drug.lower() == 'propofol':
+    TCI = TCI_Propofol
+elif config.drug.lower() == 'ketamine':
+    TCI = TCI_Ketamine
 
 def mlmin_mcgkgmin(mlmin=None, mcgkgmin=None):
     if mlmin is not None:
@@ -290,6 +295,8 @@ class LiveTCI(mp.Process):
                  history_interval=2.0,
                  projection_duration=20*60,
                  projection_interval=5.0,
+                 simulation_duration=20*60,
+                 simulation_interval=5.0,
                  **tci_kw):
         super(LiveTCI, self).__init__()
 
@@ -310,6 +317,12 @@ class LiveTCI(mp.Process):
         self.projection_interval = projection_interval
         self.projection_request_flag = mp.Value('b', 0)
         self._projection = mp.Queue()
+        
+        self.simulation_duration = simulation_duration
+        self.simulation_interval = simulation_interval
+        self.simulation_request_flag = mp.Value('b', 0)
+        self.sim_infusion = mp.Value('d', 0.0)
+        self._simulation = mp.Queue()
         
         self.clear_instruction_queue_flag = mp.Value('b', 0)
 
@@ -340,6 +353,16 @@ class LiveTCI(mp.Process):
             time.sleep(0.005)
         proj = self._projection.get()
         ptime = np.arange(len(proj)) * self.projection_interval
+        return ptime, proj
+    
+    def simulation(self, infusion=0.0):
+        self.sim_infusion.value = infusion
+
+        self.simulation_request_flag.value = True
+        while self.simulation_request_flag.value:
+            time.sleep(0.005)
+        proj = self._simulation.get()
+        ptime = np.arange(len(proj)) * self.simulation_interval
         return ptime, proj
 
     def bolus(self, dose=None, ce=None):
@@ -451,8 +474,6 @@ class LiveTCI(mp.Process):
                 pass
 
     def project(self, instructions):
-        # TODO: make a simulation similar to projection but allows user to specify some hypothetical instructions when calling this (right now it just simulates out what will happen under the current directions)
-
         i_rates, i_starts = zip(*instructions)
 
         rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
@@ -468,6 +489,18 @@ class LiveTCI(mp.Process):
 
         self._projection.put(proj)
         self.projection_request_flag.value = 0
+    
+    def simulate(self):
+        # TODO incorporate bolus
+        infusion = self.sim_infusion.value
+
+        rates, durs = [infusion], [self.simulation_duration]
+        sim = simulate(self.tci, rates, durs,
+                       sim_resolution=self.simulation_interval,
+                       report_resolution=None)
+
+        self._simulation.put(sim)
+        self.simulation_request_flag.value = 0
 
     def run(self):
         self.pump = Pump()
@@ -505,6 +538,9 @@ class LiveTCI(mp.Process):
             # provide projection if user requested it
             if self.projection_request_flag.value:
                 threading.Thread(target=self.project, args=(queued_instructions.copy(),), daemon=True).start()
+            # provide simulation if user requested it
+            if self.simulation_request_flag.value:
+                threading.Thread(target=self.simulate, daemon=True).start()
 
             # then run the next step on the waiting list
             if len(queued_instructions) == 0:
@@ -539,6 +575,7 @@ class LiveTCI(mp.Process):
             time.sleep(0.010)
 
 if __name__ == '__main__':
+    from fus_anes.tci.tci_util import LiveTCI
     lt = LiveTCI()
     lt.goto(0.4)
 
@@ -546,3 +583,5 @@ if __name__ == '__main__':
     pl.plot(*lt.history)
 
     pl.plot(*lt.projection)
+
+    pl.plot(*lt.simulation(infusion=0))

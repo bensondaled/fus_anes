@@ -62,9 +62,6 @@ pl.legend(); pl.grid(True)
 
 
 ## Test #3: fancy target reaching
-'''NOTES
-This is working amazingly well. The next step is to make a class that handles realtime management. So it should first allow designing a plan like a walkup, but it should be able to be realtime-called and rapidly change course, specifically to hold at a given level. We'll achieve this by making a queue of upcoming instructions, which gets reset if user decides to at any point. And it'll dump very fast short-term instructions into that queue, then in the background prepare longer-term instructions and dump onto the back.
-'''
 t = TCI(age=age, weight=weight, height=height, sex=sex)
 vals = []
 

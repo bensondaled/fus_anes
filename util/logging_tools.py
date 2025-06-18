@@ -1,3 +1,4 @@
+import fus_anes.config as config
 import logging
 
 def setup_logging():

@@ -195,7 +195,6 @@ class Interface(qtw.QWidget):
         tbar_frame = qtw.QFrame()
         tbar_frame.setFrameShape(qtw.QFrame.Box)
         tbar_frame.setLineWidth(3)
-        #tbar_frame.setStyleSheet("background-color: rgb(241, 255, 255);")
         tbar_frame.setStyleSheet("background-color: rgb(241, 255, 255); color: rgb(0, 0, 0);")
         tbar_layout = qtw.QVBoxLayout()
         tbar_layout.setSpacing(0)
@@ -214,6 +213,7 @@ class Interface(qtw.QWidget):
 
         self.b_sesh = qtw.QPushButton('New session')
         self.l_sesh = qtw.QLabel('(no session)')
+        self.b_run_baseline = qtw.QPushButton('Baseline')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
         self.t_bolus.setFixedWidth(60)
@@ -221,56 +221,33 @@ class Interface(qtw.QWidget):
         self.t_infusion = qtw.QLineEdit('0')
         self.t_infusion.setFixedWidth(60)
         self.l_infusion_rate = qtw.QLabel('')
-        self.b_simulate = qtw.QPushButton('Simulate bolus && infusion')
-        self.b_load_infusion_protocol = qtw.QPushButton('Load protocol')
-        self.l_infusion_protocol = qtw.QLabel('(no protocol)')
-        self.b_toggle_infusion_protocol = qtw.QPushButton('Run protocol')
-        self.b_hold_ce = qtw.QPushButton('Hold C_e')
+        self.b_simulate = qtw.QPushButton('Simulate')
+        self.b_project = qtw.QPushButton('Project')
+        self.b_set_tci_target = qtw.QPushButton('Hold C_e')
+        self.t_set_tci_target = qtw.QLineEdit('0')
+        self.t_set_tci_target.setFixedWidth(60)
         self.b_marker = qtw.QPushButton('Mark')
         self.t_marker = qtw.QLineEdit('')
         self.b_reset_xlim = qtw.QPushButton('Reset timeline zoom/pan')
         self.b_reset_xlim.setEnabled(False)
         self.b_toggle_raw = qtw.QPushButton('Toggle main views')
         self.b_toggle_video = qtw.QPushButton('Toggle video/audio/CO2')
-        red_palette = QPalette(*[QColor('red') for _ in range(9)])
-        self.l_resets = qtw.QLabel('Resets:', palette=red_palette)
-        self.b_reset_capnostream = qtw.QPushButton('CO2', palette=red_palette)
-        self.b_reset_cam = qtw.QPushButton('Cam/Mic', palette=red_palette)
-        self.aud_select = qtw.QComboBox()
-        self.aud_select.addItems(['None'] + config.auditory_grp_names)
-        self.aud_select_check = qtw.QCheckBox('_d')
-        self.aud_select2 = qtw.QComboBox()
-        self.aud_select2.addItems(['None'] + config.auditory_grp_names)
-        self.aud_select2_check = qtw.QCheckBox('_d')
-        self.b_aud_prep = qtw.QPushButton('Prepare audio')
-        self.b_aud_play = qtw.QPushButton('Play audio')
-        self.aud_all = qtw.QCheckBox('All')
 
         row0_toolbar_items = [1, self.b_sesh, self.l_sesh, 50,
                              self.b_reset_xlim, 1,
                              self.b_toggle_raw, 1,
                              self.b_toggle_video,
-                              50, self.l_resets, 1,
-                              self.b_reset_capnostream, 1,
-                              self.b_reset_cam, 1,
+                              50,
                               ]
         row1_toolbar_items = [1,
+                              self.b_run_baseline, 5,
                               self.b_marker, self.t_marker, 2,
                               20,
                               self.b_bolus, self.t_bolus, 1,
                               self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,
+                              self.b_project, 15,
                               self.b_simulate, 15,
-                              self.b_hold_ce, 1,
-                              self.b_load_infusion_protocol,
-                              self.l_infusion_protocol,
-                              self.b_toggle_infusion_protocol, 15,
-                              self.b_aud_prep, 1,
-                              self.aud_select_check, 1,
-                              self.aud_select, 4,
-                              self.aud_select2_check, 1,
-                              self.aud_select2, 2,
-                              self.b_aud_play, 1,
-                              self.aud_all, 1,
+                              self.b_set_tci_target, self.t_set_tci_target, 1,
                               15,
                               ]
 
@@ -360,15 +337,7 @@ class Interface(qtw.QWidget):
         pw.addItem(lri)
         self.data_objs[f'tci'] = None
         self.data_objs[f'tci_sim'] = None
-        self.data_objs[f'tci_prot'] = None
         self.bolusinfusion_markers_drawn = []
-        
-        # spect trend
-        pw = self._tl_plot('spect_trend', 'Ratio')
-        pw.setMouseEnabled(x=False, y=True)
-        pw.setMenuEnabled(True); pw.showButtons()
-        self.data_objs[f'spect_trend'] = [None for _ in range(config.n_live_chan)]
-        self.data_objs[f'spect_trend_smooth'] = [None for _ in range(config.n_live_chan)]
         
         # live channels
         self.spect_time_selects = {}
@@ -532,26 +501,6 @@ class Interface(qtw.QWidget):
             self.data_objs[f'eeg_psd_{disp_idx}'] = [None for _ in range(config.n_spect_time_selections)]
             glayout.addWidget(tlayout, 1, 0, 1, 2) # last 2->1 if readding another plot there
 
-            # raw eeg
-            '''
-            tlayout, pw = sub_plot()
-            tlayout.ci.layout.setContentsMargins(0,0,0,0)
-            #pw.setMenuEnabled(False); pw.hideButtons()
-            pw.setMouseEnabled(x=False, y=True)
-            yaxis = pw.getAxis('left')
-            #yaxis.setStyle(showValues=False)
-            pw.setXRange(-0.05, config.raw_eeg_display_dur+0.05, padding=0)
-            pw.enableAutoRange(enable=False)
-            xaxis = pw.getAxis('bottom')
-            xaxis.setTicks([[(t, f'{t:0.0f}') for t in np.arange(config.raw_eeg_display_dur+1)]])
-            self.plot_objs[f'eeg_raw_{disp_idx}'] = pw
-            self.data_objs[f'eeg_raw_{disp_idx}'] = None
-            glayout.addWidget(tlayout, 1, 1, 1, 1)
-            
-            glayout.setColumnStretch(0, 3)
-            glayout.setColumnStretch(1, 3)
-            '''
-
             layout.addWidget(gframe, 2, 0, 1, -1)
             self.main_layout.addWidget(frame)
             
@@ -561,7 +510,6 @@ class Interface(qtw.QWidget):
         self.main_layout.setStretchFactor(self.frame_objs['timeline_nav'], 1)
         self.main_layout.setStretchFactor(self.frame_objs['timeline'], 1)
         self.main_layout.setStretchFactor(self.frame_objs['tci'], 4)
-        self.main_layout.setStretchFactor(self.frame_objs['spect_trend'], 4)
         for frame in self.frame_objs['live_chs']:
             self.main_layout.setStretchFactor(frame, 10)
 
@@ -628,29 +576,6 @@ class Interface(qtw.QWidget):
                 ydat = ydata[:, ch] * self.raw_eeg_zoom_factor + idx
                 objs[idx].setData(xdata, ydat, pen=cols[ch])
         
-        '''
-
-        for disp_idx in range(config.n_live_chan):
-            do_name = f'eeg_raw_{disp_idx}'
-            obj = self.data_objs[do_name]
-            pobj = self.plot_objs[do_name]
-            
-            chan_idxs = self.get_chan_selections(disp_idx)
-            # TODO TEMP - need to show all ideally?
-            chan_idx = chan_idxs[0]
-
-            ydat = ydata[:, chan_idx]
-
-            if obj is None:
-                obj = pobj.plot(xdata, ydat, pen='black')
-                self.data_objs[do_name] = obj
-
-            else:
-                obj.setData(xdata, ydat)
-        '''
-
-        #self.app.processEvents()
-    
     def update_eeg_spect(self, data, xvals, yvals):
 
         for disp_idx in range(config.n_live_chan):
@@ -688,11 +613,6 @@ class Interface(qtw.QWidget):
 
             else:
                 obj.setImage(dat, autoLevels=False)
-                #obj.setLevels([0, vmax])
-            
-            #with warnings.catch_warnings():
-            #    warnings.filterwarnings('ignore', r'All-NaN slice encountered')
-            #    obj.setLevels([np.nanmin(dat), np.nanmax(dat)])
             
             tr = QTransform()
             xscale = (xvals[-1] - xvals[0]) / len(xvals)
@@ -703,12 +623,11 @@ class Interface(qtw.QWidget):
             
             pobj.setXRange(*self.timeline_xlim, padding=0)
             
-    def update_tci(self, xvals, yvals, sim_time=None, sim_vals=[], prot_time=None, prot_vals=[]):
+    def update_tci(self, xvals, yvals, sim_time=None, sim_vals=[]):
         do_name = f'tci'
         pobj = self.plot_objs[do_name]
         obj = self.data_objs[do_name]
         obj_sim = self.data_objs['tci_sim']
-        obj_prot = self.data_objs['tci_prot']
 
         if obj is None:
             obj = pobj.plot(xvals, yvals, pen=dict(color='black',
@@ -728,18 +647,10 @@ class Interface(qtw.QWidget):
         elif len(sim_vals)>0:
             obj_sim.setData(sim_time, sim_vals)
         
-        if obj_prot is None and len(prot_vals)>0:
-            obj_prot = pobj.plot(prot_time, prot_vals, pen=dict(color='blue',
-                                                             width=2,
-                                                             style=Qt.DashLine))
-            pobj.enableAutoRange(enable=False)
-            self.data_objs['tci_prot'] = obj_prot
-        elif len(prot_vals)>0:
-            obj_prot.setData(prot_time, prot_vals)
 
         # expand canvas if needed (Y)
         minn, maxx = pobj.getViewBox().viewRange()[1]
-        nmax = np.nanmax(np.concatenate([yvals, sim_vals, prot_vals]))
+        nmax = np.nanmax(np.concatenate([yvals, sim_vals]))
         # commenting out for now but can reinstate if helpful
         #if nmax!=0 and (nmax>maxx or nmax<maxx*0.5):
         #    y1 = max(nmax*1.2, config.tci_minval)
@@ -764,32 +675,6 @@ class Interface(qtw.QWidget):
                 obj.setVisible(False)
             else:
                 obj.setVisible(True)
-
-    def update_spect_trend(self, trends, xvals):
-        pobj = self.plot_objs[f'spect_trend']
-        dobjs = self.data_objs[f'spect_trend']
-        dsobjs = self.data_objs[f'spect_trend_smooth']
-
-        for chan_idx, (obj, sobj, trend) in enumerate(zip(dobjs, dsobjs, trends)):
-            trend_smoothed = sliding_window(trend, ws=config.ratio_smooth_win_size, pos='left')
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', r'Mean of empty slice')
-                trend_smoothed = np.nanmean(trend_smoothed, axis=1)
-
-            if obj is None:
-                obj = pobj.plot(xvals, trend,
-                                pen=dict(color=chan_cols[chan_idx], width=1))
-                obj.setAlpha(0.5, False)
-                sobj = pobj.plot(xvals, trend_smoothed,
-                                pen=dict(color=chan_cols[chan_idx], width=2))
-                self.data_objs['spect_trend'][chan_idx] = obj
-                self.data_objs['spect_trend_smooth'][chan_idx] = sobj
-
-            else:
-                obj.setData(xvals, trend)
-                sobj.setData(xvals, trend_smoothed)
-        
-        pobj.setXRange(*self.timeline_xlim, padding=0)
 
     def user_zoompan(self, view=None, xlim=None):
         if self.auto_adjusting_timeline:
@@ -884,7 +769,7 @@ class Interface(qtw.QWidget):
             self.auto_adjusting_timeline = False
             
     def update_xticks(self):
-        pobjs = ['timeline', 'tci', 'spect_trend', 'timeline_nav'] +\
+        pobjs = ['timeline', 'tci', 'timeline_nav'] +\
                 [p for p in self.plot_objs if p.startswith('eeg_spect_')]
 
         xticks = np.arange(0, self.timeline_xlim[1]*10, 60)

@@ -16,8 +16,10 @@ name = 'andy'
 # Paths
 data_path = '/Users/bdd/data/fus_anes/'
 logging_file = '/Users/bdd/data/fus_anes/log.log'
+loading_img_path = '/Users/bdd/code/fus_anes/media/propofol.png'
 
 # Verbal instructions
+baseline_audio_path = '/Users/bdd/code/fus_anes/media/baseline_audio'
 verbal_instructions_path = '/Users/bdd/data/fus_anes/'
 verbal_instruction_interval = 0.5, (3.0, 1.5) # secs: min, (mean, sd)
 verbal_instruction_command = 'squeeze'
@@ -68,6 +70,7 @@ audio_device_idx = 0 # use audio_probe script to identify mics
 n_audio_display = 0.5 # secs
 
 # TCI
+drug = 'propofol'
 pump_port = 'COM8' # Device manager: "Prolific USB-to-Serial..."
 tci_use_prior_session = True
 tci_sim_duration = 8*60 # secs
