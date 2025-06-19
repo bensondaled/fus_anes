@@ -308,6 +308,8 @@ class LiveTCI(mp.Process):
         
         self.level_request_flag = mp.Value('b', 0)
         self._level = mp.Value('d', 0.0)
+        self.rate_request_flag = mp.Value('b', 0)
+        self._rate = mp.Value('d', 0.0)
         
         self.history_interval = history_interval
         self.history_request_flag = mp.Value('b', 0)
@@ -324,6 +326,9 @@ class LiveTCI(mp.Process):
         self.sim_infusion = mp.Value('d', 0.0)
         self._simulation = mp.Queue()
         
+        self.export_request_flag = mp.Value('b', 0)
+        self._export = mp.Queue()
+        
         self.clear_instruction_queue_flag = mp.Value('b', 0)
 
         self.kill_flag = mp.Value('b', 0)
@@ -334,24 +339,27 @@ class LiveTCI(mp.Process):
     def level(self):
         self.level_request_flag.value = True
         while self.level_request_flag.value:
-            time.sleep(0.005)
+            time.sleep(0.025)
         return self._level.value
+    
+    @property
+    def infusion_rate(self):
+        self.rate_request_flag.value = True
+        while self.rate_request_flag.value:
+            time.sleep(0.025)
+        return self._rate.value
     
     @property
     def history(self):
         self.history_request_flag.value = True
-        while self.history_request_flag.value:
-            time.sleep(0.005)
-        hist = self._history.get()
-        htime = np.arange(len(hist)) * self.history_interval
+        hist, t0 = self._history.get(block=True)
+        htime = np.arange(len(hist)) * self.history_interval + t0
         return htime, hist
     
     @property
     def projection(self):
         self.projection_request_flag.value = True
-        while self.projection_request_flag.value:
-            time.sleep(0.005)
-        proj = self._projection.get()
+        proj = self._projection.get(block=True)
         ptime = np.arange(len(proj)) * self.projection_interval
         return ptime, proj
     
@@ -359,13 +367,14 @@ class LiveTCI(mp.Process):
         self.sim_infusion.value = infusion
 
         self.simulation_request_flag.value = True
-        while self.simulation_request_flag.value:
-            time.sleep(0.005)
-        proj = self._simulation.get()
-        ptime = np.arange(len(proj)) * self.simulation_interval
-        return ptime, proj
+        sim = self._simulation.get(block=True)
+        stime = np.arange(len(sim)) * self.simulation_interval
+        return stime, sim
 
     def bolus(self, dose=None, ce=None):
+        if (dose==0 and ce==None) or (dose==None and ce==0):
+            return
+
         self.clear_instruction_queue()
         self.user_request_queue.put(('bolus', [dose, ce]))
 
@@ -389,7 +398,7 @@ class LiveTCI(mp.Process):
 
             # provide history if user requested it
             if self.history_request_flag.value:
-                self._history.put(np.array(history))
+                self._history.put([np.array(history), self.t0])
                 self.history_request_flag.value = 0
 
             if now() - last_update >= self.history_interval:
@@ -423,7 +432,7 @@ class LiveTCI(mp.Process):
                     rate, dur = params
 
                     previous_rate = self.tci.infusion_rate
-                    start_time = now() + self.new_instruction_delay
+                    start_time = now() #+ self.new_instruction_delay # leave out the delay here, because direct commands for infusions and boluses will otherwise be delayed
                     
                     # handle infusion start
                     instruction = (rate, start_time)
@@ -474,7 +483,11 @@ class LiveTCI(mp.Process):
                 pass
 
     def project(self, instructions):
-        i_rates, i_starts = zip(*instructions)
+        if len(instructions) != 0:
+            i_rates, i_starts = zip(*instructions)
+        else:
+            i_rates = []
+            i_starts = []
 
         rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
 
@@ -488,7 +501,6 @@ class LiveTCI(mp.Process):
         proj = simulate(self.tci, rates, durs, sim_resolution=self.projection_interval, report_resolution=None)
 
         self._projection.put(proj)
-        self.projection_request_flag.value = 0
     
     def simulate(self):
         # TODO incorporate bolus
@@ -500,11 +512,11 @@ class LiveTCI(mp.Process):
                        report_resolution=None)
 
         self._simulation.put(sim)
-        self.simulation_request_flag.value = 0
 
     def run(self):
         self.pump = Pump()
         self.tci = TCI(**self.tci_kw)
+        self.t0 = now()
 
         threading.Thread(target=self.process_user_requests, daemon=True).start()
         threading.Thread(target=self.keep_history, daemon=True).start()
@@ -534,14 +546,28 @@ class LiveTCI(mp.Process):
                 last_tci_cmd_time = now()
                 self._level.value = self.tci.level
                 self.level_request_flag.value = 0
+            
+            # and rate
+            if self.rate_request_flag.value:
+                self._rate.value = self.tci.infusion_rate
+                self.rate_request_flag.value = 0
 
             # provide projection if user requested it
             if self.projection_request_flag.value:
                 threading.Thread(target=self.project, args=(queued_instructions.copy(),), daemon=True).start()
+                self.projection_request_flag.value = 0
+
             # provide simulation if user requested it
             if self.simulation_request_flag.value:
                 threading.Thread(target=self.simulate, daemon=True).start()
+                self.simulation_request_flag.value = 0
+            
+            # export if user requested it
+            if self.export_request_flag.value:
+                threading.Thread(target=self.run_export, daemon=True).start()
+                self.export_request_flag.value = 0
 
+            
             # then run the next step on the waiting list
             if len(queued_instructions) == 0:
                 continue
@@ -550,6 +576,7 @@ class LiveTCI(mp.Process):
                 continue
 
             #print('\n'.join([str((r, t-abs_start_time)) for r,t in queued_instructions]))
+            
 
             rate, ts = queued_instructions.pop(0)
             print(f'Running instruction: rate={rate}, at time {ts} (delay = {1000*(now()-ts):0.2f}ms)')
@@ -568,7 +595,14 @@ class LiveTCI(mp.Process):
         
         self.pump.end()
         self._on = False
-    
+
+    def run_export(self):
+        self._export.put(self.tci.export())
+
+    def export(self):
+        self.export_request_flag.value = 1
+        return self._export.get(block=True)
+
     def end(self):
         self.kill_flag.value = 1
         while self._on.value:

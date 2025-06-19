@@ -58,11 +58,14 @@ class BaselineEyes():
         self.clip_paths = [os.path.join(config.baseline_audio_path, name) for name in names]
         self.n_reps = n_reps
         self.dur = dur
+        self.playing = False
     
     def play(self):
-        threading.Thread(target=self._play, daemon=True).start()
+        if not self.playing:
+            threading.Thread(target=self._play, daemon=True).start()
 
     def _play(self):
+        self.playing = True
         paths = np.repeat(self.clip_paths, self.n_reps)
         np.random.shuffle(paths)
 
@@ -72,6 +75,7 @@ class BaselineEyes():
             s.play()
             wait(dur)
             wait(self.dur)
+        self.playing = False
 
 if __name__ == '__main__':
     vi = SqueezeInstructions()

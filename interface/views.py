@@ -335,8 +335,9 @@ class Interface(qtw.QWidget):
         yaxis = pw.getAxis('left')
         yaxis.setTicks([[(t, f'{t:0.1f}') for t in np.arange(0,11,0.5)]])
         pw.addItem(lri)
-        self.data_objs[f'tci'] = None
+        self.data_objs[f'tci_hist'] = None
         self.data_objs[f'tci_sim'] = None
+        self.data_objs[f'tci_proj'] = None
         self.bolusinfusion_markers_drawn = []
         
         # live channels
@@ -623,40 +624,39 @@ class Interface(qtw.QWidget):
             
             pobj.setXRange(*self.timeline_xlim, padding=0)
             
-    def update_tci(self, xvals, yvals, sim_time=None, sim_vals=[]):
-        do_name = f'tci'
-        pobj = self.plot_objs[do_name]
-        obj = self.data_objs[do_name]
-        obj_sim = self.data_objs['tci_sim']
+    def update_tci_data(self, xvals, yvals, kind='hist'):
+        # hist / sim / proj
+        colors = dict(hist='black', proj='gray', sim='blue')
+        col = colors[kind]
+        zvals = dict(hist=100, sim=99, proj=98)
+        zval = zvals[kind]
+
+        pen = dict(color=col, width=2)
+        if kind in ['proj', 'sim']:
+            pen['style'] = Qt.DashLine
+
+        data_name = f'tci_{kind}'
+
+        pobj = self.plot_objs['tci']
+        obj = self.data_objs[data_name]
 
         if obj is None:
-            obj = pobj.plot(xvals, yvals, pen=dict(color='black',
-                                                   width=4,))
-            obj.setZValue(100)
+            obj = pobj.plot(xvals, yvals, pen=pen)
+            obj.setZValue(zval)
             pobj.enableAutoRange(enable=False)
-            self.data_objs[do_name] = obj
+            self.data_objs[data_name] = obj
         else:
             obj.setData(xvals, yvals)
         
-        if obj_sim is None and len(sim_vals)>0:
-            obj_sim = pobj.plot(sim_time, sim_vals, pen=dict(color='gray',
-                                                             width=2,
-                                                             style=Qt.DashLine))
-            pobj.enableAutoRange(enable=False)
-            self.data_objs['tci_sim'] = obj_sim
-        elif len(sim_vals)>0:
-            obj_sim.setData(sim_time, sim_vals)
         
-
-        # expand canvas if needed (Y)
-        minn, maxx = pobj.getViewBox().viewRange()[1]
-        nmax = np.nanmax(np.concatenate([yvals, sim_vals]))
         # commenting out for now but can reinstate if helpful
+        # expand canvas if needed (Y)
+        #minn, maxx = pobj.getViewBox().viewRange()[1]
+        #nmax = np.nanmax(yvals)
         #if nmax!=0 and (nmax>maxx or nmax<maxx*0.5):
         #    y1 = max(nmax*1.2, config.tci_minval)
         #    pobj.setYRange(0, y1, padding=0)
        
-    
         pobj.setXRange(*self.timeline_xlim, padding=0)
     
     def update_eeg_psd(self, disp_idx, selection_idx, data, xvals, **kw):

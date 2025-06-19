@@ -53,6 +53,7 @@ cmap = 'rainbow'
 eeg_baseline_gain = 2
 eeg_gain_zoom_factor = 500 / eeg_baseline_gain # high: finer
 ratio_smooth_win_size = 5
+spect_log = True
 
 # Misc display
 timeline_duration = 10*60 # secs, default time range to show

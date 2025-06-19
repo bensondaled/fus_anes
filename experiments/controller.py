@@ -6,16 +6,25 @@ import re
 import os
 from PyQt5 import QtWidgets as qtw
 from PyQt5.QtCore import QTimer
+from functools import wraps
 
 from fus_anes.util import nanpow2db, now
 import fus_anes.config as config
 from fus_anes.interface import Interface
 from .session import Session
 
+def str2num(s):
+    try:
+        s = float(s)
+    except:
+        s = 0
+    return s
+
 def require_session(func):
+    @wraps(func)
     def wrapper(self, *args, **kwargs):
         if not self.running:
-            return
+            return lambda *a, **kw: None
         if self.session and self.session.running:
             return func(self, *args, **kwargs)
     return wrapper
@@ -27,8 +36,10 @@ class Controller():
         # bindings
         self.ui.closing.connect(self.end)
         self.ui.b_sesh.clicked.connect(self.session_toggle)
+        self.ui.b_run_baseline.clicked.connect(self.run_baseline)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
+        self.ui.b_project.clicked.connect(self.project)
         self.ui.b_project.clicked.connect(self.project)
         self.ui.b_simulate.clicked.connect(self.simulate)
         self.ui.b_set_tci_target.clicked.connect(self.set_tci_target)
@@ -73,14 +84,14 @@ class Controller():
         
         # update functions
         self.timers = {}
-        self.repeat(self.update_eeg_raw, 15)#int(1000/config.fs))
+        self.repeat(self.update_eeg_raw, 15)
         self.repeat(self.update_eeg_spect,
                     1000 * int(config.spect_update_interval / config.fs))
         self.repeat(self.update_generic, 250) 
-        self.repeat(self.update_tci, 1000)
+        self.repeat(self.update_tci, 1500)
         self.repeat(self.update_timeline, 250)
         self.repeat(self.update_video, 30)
-        self.repeat(self.update_errors, 500)
+        self.repeat(self.update_errors, 1000)
 
     def repeat(self, function, interval):
         timer = QTimer()
@@ -92,6 +103,10 @@ class Controller():
     def drag_timeline_nav(self, *args):
         x0, x1 = self.ui.timeline_nav_lr.getRegion()
         self.ui.user_zoompan(xlim=[x0, x1])
+    
+    @require_session
+    def run_baseline(self, *args):
+        self.session.run_baseline()
     
     @require_session
     def select_spect_time(self, obj, selection_idx=0, figname=''):
@@ -146,50 +161,50 @@ class Controller():
             dose = int(dose)
         except:
             dose = 0
-        self.session.give_bolus([t, dose])
+
+        if dose == 0:
+            return
+
+        self.session.tci.bolus(dose)
     
     @require_session
     def simulate(self, event):
-        b = self.ui.t_bolus.text()
-        try:
-            b = int(b)
-        except:
-            b = 0
-        i = self.ui.t_infusion.text()
-        try:
-            i = int(i)
-        except:
-            i = 0
+        b = str2num(self.ui.t_bolus.text())
+        i = str2num(self.ui.t_infusion.text())
 
-        self.session.simulate_tci(bolus=b, infusion=i)
+        sim_time, sim_vals = self.session.tci.simulation(infusion=i)
+        sim_time += now()
+        sim_time -= self.session.running
+        self.ui.update_tci_data(sim_time, sim_vals, kind='sim')
     
     @require_session
     def project(self, event):
-        pass # TODO
+        proj_time, proj_vals = self.session.tci.projection
+        proj_time += now()
+        proj_time -= self.session.running
+        self.ui.update_tci_data(proj_time, proj_vals, kind='proj')
+
+        print(proj_time, proj_vals)
     
     @require_session
     def infuse(self, event):
         t = now()
-        dose = self.ui.t_infusion.text()
-        try:
-            dose = int(dose)
-        except:
-            dose = 0
-        self.session.give_infusion([t, dose])
-
+        dose = str2num(self.ui.t_infusion.text())
+        self.session.tci.infuse(dose)
 
     @require_session
     def set_tci_target(self, event):
-        pass #TODO
+        target = str2num(self.ui.t_set_tci_target.text())
+        self.session.tci.goto(target)
 
     @require_session
     def update_timeline(self):
         dt = now() - self.session.running
         self.ui.update_timeline(dt) # moving ticker
         
-        boluses = [t-self.session.running for t, d in self.session.boluses]
-        infusions = [t-self.session.running for t, d in self.session.infusions]
-        self.ui.update_meds(boluses=boluses, infusions=infusions)
+        #boluses = [t-self.session.running for t, d in self.session.boluses]
+        #infusions = [t-self.session.running for t, d in self.session.infusions]
+        #self.ui.update_meds(boluses=boluses, infusions=infusions)
         
         markers = [t-self.session.running for t, txt in self.session.markers]
         self.ui.update_markers(markers)
@@ -218,20 +233,9 @@ class Controller():
             self.ui.vm.setVisible(True)
     
     @require_session
-    def reset_xlim(self):
+    def reset_xlim(self, *args, **kw):
         dt = now() - self.session.running
         
-        '''
-        tci_time, tci_vals = self.session.get_tci_curve()
-        sim_idx, sim_vals = self.session.simulation_idx, self.session.simulated_tci_vals
-        tci_time = np.array(tci_time) - self.session.running
-        sim_time = tci_time[sim_idx] + np.arange(len(sim_vals))
-        
-        if len(sim_time):
-            maxx = max(dt, sim_time[-1], config.timeline_duration)
-        else:
-            maxx = max(dt, config.timeline_duration)
-        '''
         x0 = max(0, dt - config.timeline_duration + config.timeline_advance)
         x1 = max(x0+config.timeline_duration, dt + config.timeline_advance)
 
@@ -239,19 +243,18 @@ class Controller():
     
     @require_session
     def update_tci(self):
-        self.session.compute_tci_point()
-        tci_time, tci_vals = self.session.get_tci_curve()
-
+        tci_time, tci_vals = self.session.tci.history
+        tci_time -= self.session.running
+        self.ui.update_tci_data(tci_time, tci_vals, kind='hist')
+        
+        '''
         sim_idx, sim_vals = self.session.simulation_idx, self.session.simulated_tci_vals
         tci_time = np.array(tci_time) - self.session.running
         sim_time = tci_time[sim_idx] + np.arange(len(sim_vals))
 
         prot_idx, prot_vals = self.session.prot_sim_idx, self.session.prot_sim_vals
         prot_time = tci_time[prot_idx] + np.arange(len(prot_vals))
-
-        self.ui.update_tci(tci_time, tci_vals,
-                           sim_time=sim_time, sim_vals=sim_vals,
-                           prot_time=prot_time, prot_vals=prot_vals)
+        '''
 
         self.ui.l_infusion_rate.setText(f'{self.session.tci.infusion_rate:0.0f}mcg/kg/min = {self.session.pump.current_infusion_rate:0.3f}ml/min')
 
@@ -295,8 +298,6 @@ class Controller():
                                  xvals=times,
                                  yvals=freqs,
                                 )
-
-        self.update_spect_trend(data)
 
     def session_toggle(self, event):
         if self.ui.b_sesh.isEnabled() == False:
@@ -354,6 +355,7 @@ class Controller():
 
         self.session.eeg.set_filters(lo=lo, hi=hi, notch=notch)
     
+    @require_session
     def update_generic(self):
         if not self.running:
             return

@@ -11,6 +11,8 @@ class TCI():
                  weight=config.weight,
                  height=config.height,
                  sex=config.sex,
+                 blood_mode='venous',
+                 opiates=False,
                  resolution=0.050,
                  prior_tcm=None):
         '''
@@ -23,6 +25,8 @@ class TCI():
         self.sex = sex
         self.weight = weight
         self.height = height
+        self.blood_mode = blood_mode
+        self.opiates = opiates
         self.prior_tcm = prior_tcm
 
         self.pre_setup()
@@ -35,19 +39,11 @@ class TCI():
             weight = self.prior_tcm.pop('weight')
             height = self.prior_tcm.pop('height')
             sex = self.prior_tcm.pop('sex')
+            blood_mode = self.prior_tcm.pop('blood_mode')
+            opiates = self.prior_tcm.pop('opiates')
             if (age != self.age) or (weight != self.weight) or (height != self.height) or (sex != self.sex) or (blood_mode != self.blood_mode) or (opiates != self.opiates):
                 logging.warning(f'Aborting prior TCI load because demographics do not match ({age}, {sex}, {weight}, {height})')
                 self.prior_tcm = None
-
-
-        if self.prior_tcm is not None:
-            for k,v in self.prior_tcm.items():
-                setattr(self, k, v)
-            prior_ts = prior_tcm['ts']
-            dt = int(round(now() - prior_ts))
-            for _ in range(dt):
-                self.wait(1.0)
-            return
 
         # starting values
         self.infusion_rate = 0.0
@@ -55,7 +51,16 @@ class TCI():
         self.x2 = 0.0 # "muscle" (rapidly equilibrating)
         self.x3 = 0.0 # "fat" (slowly equilibrating)
         self.xe0 = 0.0 # "brain" (effect site)
-        
+
+        if self.prior_tcm is not None:
+            for k,v in self.prior_tcm.items():
+                setattr(self, k, v)
+            prior_ts = self.prior_tcm['ts']
+            dt = int(round(now() - prior_ts))
+            for _ in range(dt):
+                self.wait(1.0)
+            return
+
     def initialize_model(self):
         time_divide = 60 * self.resolution_mult # bc these params were all in /min
         self.ke0 /= time_divide # central <-> brain
@@ -109,9 +114,9 @@ class TCI():
             self.xe0 += xk1e - xke1
     
     def export(self):
-        to_export = ['x1', 'x2', 'x3', 'xeo',
+        to_export = ['x1', 'x2', 'x3', 'xe0',
                      'v1', 'v2', 'v3',
-                     'k10', 'k12', 'k13', 'k21', 'k31', 'keo']
+                     'k10', 'k12', 'k13', 'k21', 'k31', 'ke0']
         to_export = {k: getattr(self, k) for k in to_export}
 
         to_export.update(age=self.age,

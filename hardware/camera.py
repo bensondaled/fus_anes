@@ -1,53 +1,146 @@
+##
+import cv2
 import numpy as np
-import os
-import multiprocessing as mp
-import queue
 import threading
-import h5py
+import multiprocessing as mp
 import time
+import os
+import queue
 
-import fus_anes.config as config
 from fus_anes.util import now, now2
+import fus_anes.config as config
+
+def list_cameras():
+    index = 0
+    available_cameras = []
+    while True:
+        cap = cv2.VideoCapture(index)
+        if not cap.isOpened():
+            break
+        else:
+            available_cameras.append(index)
+        cap.release()
+        index += 1
+    return available_cameras
 
 if config.THREADS_ONLY:
     mproc = threading.Thread
 else:
     mproc = mp.Process
-
+    
 class Camera(mproc):
-    def __init__(self, name):
+    def __init__(self, name, error_queue=None,):
         super(Camera, self).__init__()
-        self.save_path = os.path.join(config.data_path, f'{name}_camera.avi')
-
+        self.name = name
+        self.save_path = os.path.join(config.data_path, f'{name}_camera')
+        os.makedirs(self.save_path, exist_ok=True)
+        self.save_path_ts = os.path.join(self.save_path, f'{name}_camera_timestamps.txt')
+        
+        self.frame_buffer = mp.Queue()
         self.kill_flag = mp.Value('b', 0)
         self._on = mp.Value('b', 0)
+        self.n_frames_captured = mp.Value('i', 0)
+        self.n_frames_saved = mp.Value('i', 0)
+        
         self.current_frame_q = mp.Queue()
         self.current_frame = None
-
+        
+        self.error_queue = error_queue
+        
+        mproc(target=self.stream_video, daemon=True).start()
         threading.Thread(target=self.keep_current, daemon=True).start()
         self.start()
 
     def run(self):
-        vc = cv2.VideoCapture(0)
-        vw_fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        vw = cv2.VideoWriter(self.save_path, vw_fourcc, 20.0, (640, 480))
+        def new_vw(idx=0):
+            path = os.path.join(self.save_path, f'{self.name}_camera_{idx}.mp4')
+            vw = cv2.VideoWriter(path, 
+            -1,
+            30, # frame rate, relatively irrelevant bc will use timestamps
+            (config.cam_frame_size[1], config.cam_frame_size[0]),
+            isColor=True)
+            return vw
+    
+        try:
+                      
+            finished = False # video, audio
+            self._on.value = 1
+            
+            ts_buffer = np.zeros(1000).astype(float)
+            ts_buffer_idx = 0
+            
+            start_time = None
+            vw_idx = 0
+            vw = new_vw(vw_idx)
+            
+            def astr(x):
+                return '\n'.join([f'{i:0.15f}' for i in x]) + '\n'
+            
+            while True:
+                # video
+                try:
+                    frame, ts = self.frame_buffer.get(block=False)
+                    vw.write(frame)
+                    ts_buffer[ts_buffer_idx] = ts
+                    ts_buffer_idx += 1
+                    self.n_frames_saved.value += 1
+                    
+                    if start_time is None:
+                        start_time = ts
+                    
+                    if ts_buffer_idx == len(ts_buffer):
+                        with open(self.save_path_ts, 'a') as f:
+                            f.write(astr(ts_buffer))
+                        ts_buffer_idx = 0
+                        
+                    if ts - start_time > config.cam_file_duration:
+                        vw.release()
+                        vw_idx += 1
+                        start_time = ts
+                        vw = new_vw(vw_idx)
+                    
+                    #print(self.n_frames_captured.value, self.n_frames_saved.value)
+                        
+                except queue.Empty:
+                    if self.kill_flag.value:
+                        finished = True
+                
+                
+                if finished:
+                    with open(self.save_path_ts, 'a') as f:
+                        f.write(astr(ts_buffer[:ts_buffer_idx]))
+                    vw.release()
+                    self._on.value = False
+                    break
+        except Exception as e:
+            self.error_queue.put(f'Camera main: {str(e)}')
+            
+    def stream_video(self):
+        try:
+            vc = cv2.VideoCapture(0)
 
-        self._on.value = 1
-        finished = False
+            frame_width = int(vc.get(cv2.CAP_PROP_FRAME_WIDTH))
+            frame_height = int(vc.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            assert frame_width == config.cam_frame_size[1] and frame_height == config.cam_frame_size[0]
 
-        while not self.kill_flag.value:
-            _, frame = vc.read()
-            vw.write(frame)
-            self.current_frame_q.put(frame)
-        
-        vc.release()
-        vw.release()
-        self._on = False
+            while self.kill_flag.value == 0:
+                ts = now()
+                success, frame = vc.read()
+                
+                if success:
+                    self.frame_buffer.put([frame, ts])
+                    self.current_frame_q.put(frame)
+                    self.n_frames_captured.value += 1
+            vc.release()
+        except Exception as e:
+            self.error_queue.put(f'Camera stream: {str(e)}')
+                
 
     def keep_current(self):
         while not self.kill_flag.value:
             try:
-                self.current_frame = self.current_frame_q.get(block=True)
+                frame = self.current_frame_q.get(block=True)
+                self.current_frame = frame
             except queue.Empty:
                 pass
 
@@ -55,3 +148,12 @@ class Camera(mproc):
         self.kill_flag.value = 1
         while self._on.value:
             time.sleep(0.010)
+            
+if __name__ == '__main__':
+    cam = Camera('mytest', error_queue=mp.Queue())
+    while cam.n_frames_captured.value == 0:
+        time.sleep(0.050)
+    for i in range(60):
+        time.sleep(1)
+        print(i)
+    cam.end()

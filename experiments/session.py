@@ -33,6 +33,7 @@ class Session():
         self.error_queue = mp.Queue()
         self.saver = Saver(session_id=self.name, data_file=self.data_file, session_obj=self, error_queue=self.error_queue)
         self.tci = LiveTCI(prior_tcm=self.get_prior_tcm())
+        self.baseline_eyes = BaselineEyes()
         self.pump = Pump(error_queue=self.error_queue, saver=self.saver)
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
         self.capnostream = Capnostream(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
@@ -40,6 +41,9 @@ class Session():
         trun = now()
         self.running = trun
         self.eeg.start_processing()
+    
+    def run_baseline(self):
+        self.baseline_eyes.play()
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]
@@ -89,9 +93,6 @@ class Session():
         
         # TODO: implement infusion
 
-    def simulate_tci(self, bolus, infusion, duration=config.tci_sim_duration):
-        # TODO: simulate
-        pass
 
     def retrieve_errors(self):
         errs = []
@@ -103,13 +104,13 @@ class Session():
                 break
         return errs
 
-    def reset_cam(self):
-        del self.cam
-        self.cam = Camera(f'{self.tech_name}_reset_{now()}', error_queue=self.error_queue)
-
-    def reset_capnostream(self):
-        del self.capnostream
-        self.capnostream = Capnostream(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
+    def get_code_txt(self):
+        py_files = [os.path.join(d,f) for d,_,fs in os.walk(os.getcwd()) for f in fs if f.endswith('.py') and not f.startswith('__')]
+        code = {}
+        for pf in py_files:
+            with open(pf, 'r') as f:
+                code[pf] = f.read()
+        return json.dumps(code)
 
     def end(self):
         self.running = False
