@@ -33,6 +33,7 @@ class Session():
         self.error_queue = mp.Queue()
         self.saver = Saver(session_id=self.name, data_file=self.data_file, session_obj=self, error_queue=self.error_queue)
         self.tci = LiveTCI(prior_tcm=self.get_prior_tcm())
+        self.squeeze = None
         self.baseline_eyes = BaselineEyes()
         self.pump = Pump(error_queue=self.error_queue, saver=self.saver)
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
@@ -44,6 +45,14 @@ class Session():
     
     def run_baseline(self):
         self.baseline_eyes.play()
+
+    def toggle_squeeze(self):
+        if self.squeeze is None:
+            self.squeeze = SqueezeInstructions()
+            self.squeeze.play()
+        else:
+            self.squeeze.end()
+            self.squeeze = None
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]

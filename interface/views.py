@@ -214,6 +214,7 @@ class Interface(qtw.QWidget):
         self.b_sesh = qtw.QPushButton('New session')
         self.l_sesh = qtw.QLabel('(no session)')
         self.b_run_baseline = qtw.QPushButton('Baseline')
+        self.b_run_squeeze = qtw.QPushButton('Squeeze')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
         self.t_bolus.setFixedWidth(60)
@@ -241,6 +242,7 @@ class Interface(qtw.QWidget):
                               ]
         row1_toolbar_items = [1,
                               self.b_run_baseline, 5,
+                              self.b_run_squeeze, 5,
                               self.b_marker, self.t_marker, 2,
                               20,
                               self.b_bolus, self.t_bolus, 1,

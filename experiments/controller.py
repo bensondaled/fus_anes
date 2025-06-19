@@ -37,6 +37,7 @@ class Controller():
         self.ui.closing.connect(self.end)
         self.ui.b_sesh.clicked.connect(self.session_toggle)
         self.ui.b_run_baseline.clicked.connect(self.run_baseline)
+        self.ui.b_run_squeeze.clicked.connect(self.toggle_squeeze)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
         self.ui.b_project.clicked.connect(self.project)
@@ -320,6 +321,14 @@ class Controller():
             self.ui.splash(True, 'Session ending...')
             #self.ui.reset_runtime_vars()
             QTimer.singleShot(100, self.session.end)
+
+    @require_session
+    def toggle_squeeze(self, event):
+        self.session.toggle_squeeze()
+        if self.session.squeeze is not None:
+            self.ui.b_run_squeeze.setText('Stop squeeze')
+        else:
+            self.ui.b_run_squeeze.setText('Squeeze')
     
     @require_session
     def update_filters(self):

@@ -16,7 +16,8 @@ class SqueezeInstructions():
         self.name = config.name.lower()
         self.audio_path = os.path.join(config.verbal_instructions_path, self.name)
         self.interval = config.verbal_instruction_interval
-
+        
+        self.is_playing = False
         self.kill_flag = False
 
     def get_clip(self, i=None):
@@ -31,10 +32,14 @@ class SqueezeInstructions():
         threading.Thread(target=self._play, daemon=True).start()
 
     def _play(self, with_nums=True):
+        self.is_playing = True
         idx = 1
         while not self.kill_flag:
             if with_nums:
                 clip = self.get_clip(idx)
+                if clip is None:
+                    idx = 1
+                    continue
             else:
                 clip = self.get_clip(None)
 
@@ -49,6 +54,7 @@ class SqueezeInstructions():
 
             wait(isi)
             idx += 1
+        self.is_playing = False
 
     def end(self):
         self.kill_flag = True
