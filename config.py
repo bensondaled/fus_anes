@@ -1,7 +1,7 @@
 from fus_anes.constants import *
 
 # Flags
-THREADS_ONLY = True
+THREADS_ONLY = False
 TESTING = True
 SIM_DATA = True
 
@@ -60,12 +60,10 @@ timeline_duration = 10*60 # secs, default time range to show
 timeline_advance = 2.5*60 # secs, how much to jump in advance when you hit the end of timeline
 
 # Camera
-default_cam_frame_size = [1080, 1920, 3]
-cam_frame_size = [540, 960, 3]
-cam_save_chunk = 180
+cam_frame_size = [1080, 1920, 3]
+cam_file_duration = 10*60 # secs
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
-cam_hdf_resize = 360
 audio_hdf_resize = audio_save_chunk * 10
 audio_device_idx = 0 # use audio_probe script to identify mics
 n_audio_display = 0.5 # secs

@@ -9,7 +9,7 @@ import logging
 import time
 from datetime import datetime as dtm
 
-from fus_anes.hardware import EEG, Pump, Camera, Capnostream
+from fus_anes.hardware import EEG, Pump, Camera, Capnostream, Microphone
 from fus_anes.verbal_instructions import SqueezeInstructions, BaselineEyes
 from fus_anes.util import Saver, multitaper_spectrogram, now, now2
 from fus_anes.tci import LiveTCI
@@ -34,17 +34,23 @@ class Session():
         self.saver = Saver(session_id=self.name, data_file=self.data_file, session_obj=self, error_queue=self.error_queue)
         self.tci = LiveTCI(prior_tcm=self.get_prior_tcm())
         self.squeeze = None
-        self.baseline_eyes = BaselineEyes()
+        self.baseline_eyes = None
         self.pump = Pump(error_queue=self.error_queue, saver=self.saver)
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
+        self.mic = Microphone(self.tech_name, error_queue=self.error_queue)
         self.capnostream = Capnostream(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
         self.eeg = EEG(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
         trun = now()
         self.running = trun
         self.eeg.start_processing()
     
-    def run_baseline(self):
-        self.baseline_eyes.play()
+    def toggle_baseline(self):
+        if self.baseline_eyes is None:
+            self.baseline_eyes = BaselineEyes()
+            self.baseline_eyes.play()
+        elif self.baseline_eyes.playing == False: # finished playing
+            self.baseline_eyes.end()
+            self.baseline_eyes = None
 
     def toggle_squeeze(self):
         if self.squeeze is None:
@@ -124,8 +130,11 @@ class Session():
     def end(self):
         self.running = False
         self.saver.write('tci_end', dict(tcm=json.dumps(self.tci.export())))
-        to_end = [self.eeg, self.capnostream, self.saver, self.pump, self.cam]
+        to_end = [self.eeg, self.capnostream, self.saver, self.pump, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze]
         for te in to_end:
+            print(te)
+            if te is None:
+                continue
             try:
                 te.end()
             except:

@@ -36,7 +36,7 @@ class Controller():
         # bindings
         self.ui.closing.connect(self.end)
         self.ui.b_sesh.clicked.connect(self.session_toggle)
-        self.ui.b_run_baseline.clicked.connect(self.run_baseline)
+        self.ui.b_run_baseline.clicked.connect(self.toggle_baseline)
         self.ui.b_run_squeeze.clicked.connect(self.toggle_squeeze)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
@@ -106,8 +106,12 @@ class Controller():
         self.ui.user_zoompan(xlim=[x0, x1])
     
     @require_session
-    def run_baseline(self, *args):
-        self.session.run_baseline()
+    def toggle_baseline(self, *args):
+        self.session.toggle_baseline()
+        if self.session.baseline_eyes is not None:
+            self.ui.b_run_baseline.setText('Stop baseline')
+        else:
+            self.ui.b_run_baseline.setText('Baseline')
     
     @require_session
     def select_spect_time(self, obj, selection_idx=0, figname=''):
@@ -185,8 +189,6 @@ class Controller():
         proj_time -= self.session.running
         self.ui.update_tci_data(proj_time, proj_vals, kind='proj')
 
-        print(proj_time, proj_vals)
-    
     @require_session
     def infuse(self, event):
         t = now()
@@ -364,7 +366,6 @@ class Controller():
 
         self.session.eeg.set_filters(lo=lo, hi=hi, notch=notch)
     
-    @require_session
     def update_generic(self):
         if not self.running:
             return
@@ -397,7 +398,7 @@ class Controller():
             frame = self.session.cam.current_frame
             self.ui.vm.set_image(frame)
             
-            audio = self.session.cam.get_current_audio()
+            audio = self.session.mic.get_current_audio()
             self.ui.vm.set_audio(audio)
             
             co2 = self.session.capnostream.get_current()
@@ -438,10 +439,10 @@ class Controller():
 
         
     def end(self):
-        self.running = False
-        
         for _, t in self.timers.items():
             t.stop()
+        
+        self.running = False
 
         if self.session is not None:
             self.session.end()

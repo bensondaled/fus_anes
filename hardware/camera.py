@@ -121,7 +121,9 @@ class Camera(mproc):
 
             frame_width = int(vc.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(vc.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            assert frame_width == config.cam_frame_size[1] and frame_height == config.cam_frame_size[0]
+            if frame_width != config.cam_frame_size[1] or frame_height != config.cam_frame_size[0]:
+                self.error_queue.put(f'Frame dims mismatch: {frame_width}, {frame_height}')
+                return
 
             while self.kill_flag.value == 0:
                 ts = now()
