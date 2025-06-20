@@ -74,7 +74,7 @@ pump_port = 'COM8' # Device manager: "Prolific USB-to-Serial..."
 tci_use_prior_session = True
 tci_sim_duration = 8*60 # secs
 tci_minval = 10
-tci_target = (2.5, 8)
+tci_display_target = (0.5, 2.0)
 syringe_diam = 26.7 #mm, BD 50/60cc syringe
 bolus_rate = 25 # ml/min
 max_bolus = 300 # mg
@@ -82,6 +82,7 @@ max_rate = 25 # ml/min, 28.4 is manufacturer max
 min_rate = 0.005 # ml/min, 0.002 is manufacturer min
 hold_level_duration = 15*60 # secs
 drug_mg_ml = 10.0 # 10mg/ml for propofol
+goto_target_step_size = 15.0
 
 # CO2
 capnostream_port = 'COM7' # Device manager: "USB Serial Port"

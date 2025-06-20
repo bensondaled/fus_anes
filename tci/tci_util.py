@@ -146,7 +146,7 @@ def compute_bolus_to_reach_ce(tci_obj, target, max_dur=60*5, sim_resolution=None
 def compute_optimal_rates(target_levels,
                           target_durations,
                           tci_obj,
-                          instruction_interval=15.0,
+                          instruction_interval=config.goto_target_step_size,
                           sim_resolution=1.0,
                           ):
     '''This function has the strict goal of simultaneously optimizing a series of consecutive infusion rates, in order to minimize the error of reaching each target supplied at each duration supplied.
@@ -211,7 +211,7 @@ def go_to_target(tci_obj, target,
                  delta_thresh=0.05,
                  new_target_travel_time=1*60.0,
                  duration=60*6,
-                 step_resolution=15.0):
+                 step_resolution=config.goto_target_step_size):
     '''This function uses compute_optimal_rates internally in order to create a plan for reaching and maintaining a target. It determines how as follows:
 
     - If the new target appears to be a change, we set a goal to jump there
@@ -237,7 +237,7 @@ def go_to_target(tci_obj, target,
     all_durs = []
 
     # Step 1: only if new level is a jump: we aim to get there in the specified time, then hold for a minute, which helps ensure stability when we arrive.
-    if np.abs(delta) > 0.05:
+    if np.abs(delta) > 0.1:
 
         assert new_target_travel_time + 1 <= duration, 'Didnt allow enough time to travel to destination, need travel_time+1 total duration at minimum, in order to get there and hold stable'
 
@@ -293,10 +293,12 @@ class LiveTCI(mp.Process):
                  saver=None,
                  new_instruction_delay=10.000, # longer is safer but also means waiting more to do things
                  history_interval=2.0,
-                 projection_duration=20*60,
+                 default_projection_duration=20*60,
                  projection_interval=5.0,
                  simulation_duration=20*60,
                  simulation_interval=5.0,
+                 hold_keep_ahead_time=120.0,
+                 maintain_time_step=60*6.0,
                  **tci_kw):
         super(LiveTCI, self).__init__()
 
@@ -309,13 +311,14 @@ class LiveTCI(mp.Process):
         self.level_request_flag = mp.Value('b', 0)
         self._level = mp.Value('d', 0.0)
         self.rate_request_flag = mp.Value('b', 0)
-        self._rate = mp.Value('d', 0.0)
+        self._tci_rate = mp.Value('d', 0.0)
+        self._pump_rate = mp.Value('d', 0.0)
         
         self.history_interval = history_interval
         self.history_request_flag = mp.Value('b', 0)
         self._history = mp.Queue()
 
-        self.projection_duration = projection_duration
+        self.default_projection_duration = default_projection_duration
         self.projection_interval = projection_interval
         self.projection_request_flag = mp.Value('b', 0)
         self._projection = mp.Queue()
@@ -324,12 +327,19 @@ class LiveTCI(mp.Process):
         self.simulation_interval = simulation_interval
         self.simulation_request_flag = mp.Value('b', 0)
         self.sim_infusion = mp.Value('d', 0.0)
+        self.sim_bolus = mp.Value('d', 0.0)
         self._simulation = mp.Queue()
         
         self.export_request_flag = mp.Value('b', 0)
         self._export = mp.Queue()
         
+        self.inst_request_flag = mp.Value('b', 0)
+        self._inst = mp.Queue()
+        
         self.clear_instruction_queue_flag = mp.Value('b', 0)
+
+        self.hold_keep_ahead_time = hold_keep_ahead_time
+        self.maintain_time_step = maintain_time_step
 
         self.kill_flag = mp.Value('b', 0)
         self._on = mp.Value('b', 0)
@@ -347,33 +357,61 @@ class LiveTCI(mp.Process):
         self.rate_request_flag.value = True
         while self.rate_request_flag.value:
             time.sleep(0.025)
-        return self._rate.value
+        return self._tci_rate.value, self._pump_rate.value
     
     @property
     def history(self):
         self.history_request_flag.value = True
-        hist, t0 = self._history.get(block=True)
-        htime = np.arange(len(hist)) * self.history_interval + t0
-        return htime, hist
+        try:
+            hist, t0 = self._history.get(block=True, timeout=2.0)
+            htime = np.arange(len(hist)) * self.history_interval + t0
+            return htime, hist
+        except:
+            return [], []
+    
+    def get_projection(self, return_obj=False):
+        # projection vs simulation: projection plays out what happens with queued instructions, whereas simulation ignores those and does what a new infusion/bolus would do
+        self.projection_request_flag.value = True
+        try:
+            proj,proj_obj = self._projection.get(block=True, timeout=2.0)
+            ptime = np.arange(len(proj)) * self.projection_interval
+        except:
+            ptime = []
+            proj = []
+            proj_obj = None
+
+        if return_obj:
+            return ptime, proj, proj_obj
+        else:
+            return ptime, proj
     
     @property
-    def projection(self):
-        self.projection_request_flag.value = True
-        proj = self._projection.get(block=True)
-        ptime = np.arange(len(proj)) * self.projection_interval
-        return ptime, proj
+    def queued_instructions(self):
+        self.inst_request_flag.value = 1
+        try:
+            inst = self._inst.get(block=True, timeout=2.0)
+            return inst
+        except:
+            return []
     
-    def simulation(self, infusion=0.0):
+    def simulation(self, infusion=0.0, bolus=0.0):
         self.sim_infusion.value = infusion
+        self.sim_bolus.value = bolus
 
         self.simulation_request_flag.value = True
-        sim = self._simulation.get(block=True)
-        stime = np.arange(len(sim)) * self.simulation_interval
-        return stime, sim
+        try:
+            sim = self._simulation.get(block=True, timeout=2.0)
+            stime = np.arange(len(sim)) * self.simulation_interval
+            return stime, sim
+        except:
+            return [], []
 
-    def bolus(self, dose=None, ce=None):
+    def bolus(self, dose=None, ce=None, clear_queue=True):
         if (dose==0 and ce==None) or (dose==None and ce==0):
             return
+        
+        if clear_queue:
+            self.clear_instruction_queue()
 
         self.clear_instruction_queue()
         self.user_request_queue.put(('bolus', [dose, ce]))
@@ -383,13 +421,14 @@ class LiveTCI(mp.Process):
         '''
         if clear_queue:
             self.clear_instruction_queue()
+
         self.user_request_queue.put(('infuse', [rate, dur]))
 
     def goto(self, target, **kw):
-        # TODO: I think the default behaviour here should be to go and to hold indefinitely, which means it needs a cascade of renewing goto commands. implement it in process_user_requests
-
-        self.clear_instruction_queue()
         self.user_request_queue.put(('goto', [target, kw]))
+
+    def maintain(self, target, **kw):
+        self.user_request_queue.put(('maintain', [target, kw]))
 
     def keep_history(self):
         history = []
@@ -412,6 +451,8 @@ class LiveTCI(mp.Process):
     
     def process_user_requests(self):
         # The purpose of this is to be a parallel continuous ongoing process that handles not the implementation of direct commands to the pump or TCI, but the conversion of user requests into commands.
+        
+        is_holding_level = False
         
         while not self.kill_flag.value:
             try:
@@ -445,14 +486,16 @@ class LiveTCI(mp.Process):
                         instruction = (return_rate, stop_time)
                         self.instruction_queue.put(instruction)
 
+                    elif dur is None:
+                        is_holding_level = False # if an infusion was specified without an end duration, this is a scenario where we want any ongoing hold to be stopped
+
                 elif kind == 'goto':
                     target, kw = params
 
                     kw['duration'] = kw.pop('duration', 4*60)
                     kw['new_target_travel_time'] = kw.pop('new_target_travel_time', 90.0)
-
                    
-                    #self.infuse(self.tci.infusion_rate) # halt everything and keep infusing at current rate
+                    #self.infuse(self.tci.infusion_rate) # halt everything and keep infusing at current rate - had this commented out, may be the right thing to keep though
 
                     start_time = now()
 
@@ -479,34 +522,78 @@ class LiveTCI(mp.Process):
 
                         # notice how the last duration is not incorporated into the instructions, ie it passes on info about when to start, but without any other steps, it will just continue that rate indefinitely
 
+                    is_holding_level = (target, cmd_time) # goto command automatically holds level; it specifies the current target and the time at which the last holding instructions will end, that way the holding logic can pick up where it left off
+
+
+                elif kind == 'maintain':
+                    print('maintaining')
+                    target, kw = params
+
+                    kw['duration'] = kw.pop('duration', self.maintain_time_step)
+                    kw['new_target_travel_time'] = kw.pop('new_target_travel_time', config.goto_target_step_size)
+                    
+                    proj_time, p, proj_obj = self.get_projection(return_obj=True)
+                    start_time = now() + proj_time[-1]
+
+                    rates, durs = go_to_target(proj_obj, target, **kw)
+                    cmd_time = start_time
+                    for rate, dur in zip(rates, durs):
+                        instruction = (rate, cmd_time)
+                        self.instruction_queue.put(instruction)
+                        cmd_time += dur
+
+                    is_holding_level = (target, cmd_time)
+
             except queue.Empty:
                 pass
 
+            # after processing all the new commands in the queue, check if we're holding a level. if we are, then we add commands into the queue if appropriate
+            if is_holding_level is not False:
+                hold_target, hold_end_time = is_holding_level
+                if hold_end_time - now() <= self.hold_keep_ahead_time:
+                    print('sending maintain command')
+                    self.maintain(hold_target)
+
     def project(self, instructions):
+        use_default_duration = False # will use a default duration if there are no instructions
+
         if len(instructions) != 0:
             i_rates, i_starts = zip(*instructions)
         else:
             i_rates = []
             i_starts = []
+            use_default_duration = True
 
         rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
 
         starts = np.append(now(), i_starts)
         durs = np.diff(starts)
-        remaining_time = self.projection_duration - np.sum(durs)
-        durs = np.append(durs, remaining_time)
+        if use_default_duration:
+            remaining_time = self.default_projection_duration - np.sum(durs)
+            durs = np.append(durs, remaining_time)
+        else:
+            durs = np.append(durs, config.goto_target_step_size) # because the last instruction is just a start, has no end
         durs[0] = max(durs[0], 0.002)
         durs = np.array(durs).tolist()
 
-        proj = simulate(self.tci, rates, durs, sim_resolution=self.projection_interval, report_resolution=None)
-
-        self._projection.put(proj)
+        proj, sim_obj = simulate(self.tci, rates, durs, sim_resolution=self.projection_interval, report_resolution=None, return_sim_object=True)
+        
+        self._projection.put([proj, sim_obj])
     
     def simulate(self):
-        # TODO incorporate bolus
+        bolus = self.sim_bolus.value
         infusion = self.sim_infusion.value
-
-        rates, durs = [infusion], [self.simulation_duration]
+        
+        rates, durs = [], []
+        remaining_dur = self.simulation_duration
+        if bolus > 0:
+            bsecs, brate = bolus_to_infusion(bolus)
+            rates += [brate]
+            durs += [bsecs]
+            remaining_dur = self.simulation_duration - bsecs
+        
+        rates += [infusion]
+        durs += [remaining_dur]
         sim = simulate(self.tci, rates, durs,
                        sim_resolution=self.simulation_interval,
                        report_resolution=None)
@@ -537,6 +624,7 @@ class LiveTCI(mp.Process):
                 rate, ts = self.instruction_queue.get(block=False)
                 # add anything new from the queue in its proper position in the working instruction list
                 bisect.insort(queued_instructions, (rate, ts), key=lambda inst: inst[1])
+                print(queued_instructions)
             except queue.Empty:
                 pass
             
@@ -549,13 +637,20 @@ class LiveTCI(mp.Process):
             
             # and rate
             if self.rate_request_flag.value:
-                self._rate.value = self.tci.infusion_rate
+                self._tci_rate.value = self.tci.infusion_rate
+                self._pump_rate.value = self.pump.current_infusion_rate
                 self.rate_request_flag.value = 0
 
+            # provide queued instructions if user requested it
+            if self.inst_request_flag.value:
+                self._inst.put(queued_instructions.copy()) # if lagging, can thread this off
+                self.inst_request_flag.value = 0
+            
             # provide projection if user requested it
             if self.projection_request_flag.value:
                 threading.Thread(target=self.project, args=(queued_instructions.copy(),), daemon=True).start()
                 self.projection_request_flag.value = 0
+
 
             # provide simulation if user requested it
             if self.simulation_request_flag.value:
@@ -601,7 +696,10 @@ class LiveTCI(mp.Process):
 
     def export(self):
         self.export_request_flag.value = 1
-        return self._export.get(block=True)
+        try:
+            return self._export.get(block=True, timeout=10.0)
+        except:
+            return dict(error='unable to export TCI')
 
     def end(self):
         self.kill_flag.value = 1
@@ -613,9 +711,10 @@ if __name__ == '__main__':
     lt = LiveTCI()
     lt.goto(0.4)
 
-    # and then when you want to try stuff:
     pl.plot(*lt.history)
 
-    pl.plot(*lt.projection)
+    pl.plot(*lt.get_projection())
 
     pl.plot(*lt.simulation(infusion=0))
+
+

@@ -44,6 +44,7 @@ class Controller():
         self.ui.b_project.clicked.connect(self.project)
         self.ui.b_simulate.clicked.connect(self.simulate)
         self.ui.b_set_tci_target.clicked.connect(self.set_tci_target)
+        self.ui.b_clear_tci_queue.clicked.connect(self.clear_tci_queue)
         self.ui.b_reset_xlim.clicked.connect(self.reset_xlim)
         self.ui.b_toggle_raw.clicked.connect(self.toggle_raw)
         self.ui.b_toggle_video.clicked.connect(self.toggle_video)
@@ -171,20 +172,24 @@ class Controller():
             return
 
         self.session.tci.bolus(dose)
+
+    @require_session
+    def clear_tci_queue(self, event):
+        self.session.tci.clear_instruction_queue()
     
     @require_session
     def simulate(self, event):
         b = str2num(self.ui.t_bolus.text())
         i = str2num(self.ui.t_infusion.text())
 
-        sim_time, sim_vals = self.session.tci.simulation(infusion=i)
+        sim_time, sim_vals = self.session.tci.simulation(infusion=i, bolus=b)
         sim_time += now()
         sim_time -= self.session.running
         self.ui.update_tci_data(sim_time, sim_vals, kind='sim')
     
     @require_session
     def project(self, event):
-        proj_time, proj_vals = self.session.tci.projection
+        proj_time, proj_vals = self.session.tci.get_projection()
         proj_time += now()
         proj_time -= self.session.running
         self.ui.update_tci_data(proj_time, proj_vals, kind='proj')
@@ -258,8 +263,9 @@ class Controller():
         prot_idx, prot_vals = self.session.prot_sim_idx, self.session.prot_sim_vals
         prot_time = tci_time[prot_idx] + np.arange(len(prot_vals))
         '''
-
-        self.ui.l_infusion_rate.setText(f'{self.session.tci.infusion_rate:0.0f}mcg/kg/min = {self.session.pump.current_infusion_rate:0.3f}ml/min')
+        
+        tci_rate, pump_rate = self.session.tci.infusion_rate
+        self.ui.l_infusion_rate.setText(f'{tci_rate:0.0f}mcg/kg/min = {pump_rate:0.3f}ml/min')
 
     @require_session
     def update_eeg_raw(self):

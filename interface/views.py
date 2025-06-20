@@ -215,6 +215,7 @@ class Interface(qtw.QWidget):
         self.l_sesh = qtw.QLabel('(no session)')
         self.b_run_baseline = qtw.QPushButton('Baseline')
         self.b_run_squeeze = qtw.QPushButton('Squeeze')
+        self.b_clear_tci_queue = qtw.QPushButton('Clear TCI')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
         self.t_bolus.setFixedWidth(60)
@@ -224,7 +225,7 @@ class Interface(qtw.QWidget):
         self.l_infusion_rate = qtw.QLabel('')
         self.b_simulate = qtw.QPushButton('Simulate')
         self.b_project = qtw.QPushButton('Project')
-        self.b_set_tci_target = qtw.QPushButton('Hold C_e')
+        self.b_set_tci_target = qtw.QPushButton('Goto TCI target')
         self.t_set_tci_target = qtw.QLineEdit('0')
         self.t_set_tci_target.setFixedWidth(60)
         self.b_marker = qtw.QPushButton('Mark')
@@ -247,9 +248,10 @@ class Interface(qtw.QWidget):
                               20,
                               self.b_bolus, self.t_bolus, 1,
                               self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,
-                              self.b_project, 15,
                               self.b_simulate, 15,
-                              self.b_set_tci_target, self.t_set_tci_target, 1,
+                              self.b_project, 15,
+                              self.b_set_tci_target, self.t_set_tci_target, 5,
+                              self.b_clear_tci_queue, 5,
                               15,
                               ]
 
@@ -331,11 +333,11 @@ class Interface(qtw.QWidget):
         pw = self._tl_plot('tci', 'C<sub>e</sub> (<sup>&mu;g</sup>&frasl;<sub>mL</sub>)')
         pw.setYRange(0, config.tci_minval)
         pw.setMouseEnabled(x=False, y=True)
-        lri = pg.LinearRegionItem(values=config.tci_target, orientation='horizontal',
+        lri = pg.LinearRegionItem(values=config.tci_display_target, orientation='horizontal',
                                   pen=dict(width=0.001,),
                                   brush=(255,236,144,120))
         yaxis = pw.getAxis('left')
-        yaxis.setTicks([[(t, f'{t:0.1f}') for t in np.arange(0,11,0.5)]])
+        yaxis.setTicks([[(t, f'{t:0.1f}') for t in np.arange(0,3,0.1)]])
         pw.addItem(lri)
         self.data_objs[f'tci_hist'] = None
         self.data_objs[f'tci_sim'] = None
@@ -633,7 +635,7 @@ class Interface(qtw.QWidget):
         zvals = dict(hist=100, sim=99, proj=98)
         zval = zvals[kind]
 
-        pen = dict(color=col, width=2)
+        pen = dict(color=col, width=3)
         if kind in ['proj', 'sim']:
             pen['style'] = Qt.DashLine
 
