@@ -61,6 +61,7 @@ timeline_advance = 2.5*60 # secs, how much to jump in advance when you hit the e
 
 # Camera
 cam_frame_size = [1080, 1920, 3]
+cam_resize = 6
 cam_file_duration = 10*60 # secs
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50

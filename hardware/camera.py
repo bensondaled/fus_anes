@@ -116,6 +116,11 @@ class Camera(mproc):
             self.error_queue.put(f'Camera main: {str(e)}')
             
     def stream_video(self):
+        if config.cam_resize not in [None, 1]:
+            resize = 1/config.cam_resize
+        else:
+            resize = False
+
         try:
             vc = cv2.VideoCapture(0)
 
@@ -128,6 +133,9 @@ class Camera(mproc):
             while self.kill_flag.value == 0:
                 ts = now()
                 success, frame = vc.read()
+                    
+                if resize:
+                    frame = cv2.resize(frame, None, fx=resize, fy=resize)
                 
                 if success:
                     self.frame_buffer.put([frame, ts])
