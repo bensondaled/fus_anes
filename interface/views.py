@@ -230,6 +230,8 @@ class Interface(qtw.QWidget):
         self.t_set_tci_target.setFixedWidth(60)
         self.b_marker = qtw.QPushButton('Mark')
         self.t_marker = qtw.QLineEdit('')
+        self.b_lor = qtw.QPushButton('LOR')
+        self.b_ror = qtw.QPushButton('ROR')
         self.b_reset_xlim = qtw.QPushButton('Reset timeline zoom/pan')
         self.b_reset_xlim.setEnabled(False)
         self.b_toggle_raw = qtw.QPushButton('Toggle main views')
@@ -245,6 +247,7 @@ class Interface(qtw.QWidget):
                               self.b_run_baseline, 5,
                               self.b_run_squeeze, 5,
                               self.b_marker, self.t_marker, 2,
+                              self.b_lor, 1, self.b_ror, 1,
                               20,
                               self.b_bolus, self.t_bolus, 1,
                               self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,

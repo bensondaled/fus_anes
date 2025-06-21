@@ -49,6 +49,8 @@ class Controller():
         self.ui.b_toggle_raw.clicked.connect(self.toggle_raw)
         self.ui.b_toggle_video.clicked.connect(self.toggle_video)
         self.ui.b_marker.clicked.connect(self.mark)
+        self.ui.b_lor.clicked.connect(self.lor)
+        self.ui.b_ror.clicked.connect(self.ror)
         self.ui.t_lopass.editingFinished.connect(self.update_filters)
         self.ui.t_hipass.editingFinished.connect(self.update_filters)
         self.ui.t_notch.editingFinished.connect(self.update_filters)
@@ -157,6 +159,18 @@ class Controller():
     def mark(self, event):
         t = now()
         text = self.ui.t_marker.text()
+        self.session.add_marker([t, text])
+    
+    @require_session
+    def lor(self, event):
+        t = now()
+        text = 'lor'
+        self.session.add_marker([t, text])
+    
+    @require_session
+    def ror(self, event):
+        t = now()
+        text = 'ror'
         self.session.add_marker([t, text])
     
     @require_session
