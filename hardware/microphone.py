@@ -41,8 +41,8 @@ class Microphone(mproc):
         self._saving = mp.Value('b', 0)
 
         self.current_audio_q = mp.Queue()
-        self.current_audio = np.zeros(int(config.n_audio_display * 44100), dtype=np.int16)
-        self.current_audio_mp = mp.Array(ctypes.c_int16, self.current_audio)
+        self.current_audio = np.zeros(int(config.n_audio_display * 44100), dtype=np.float32)
+        self.current_audio_mp = mp.Array(ctypes.c_float, self.current_audio)
 
         self.n_frames_captured_a = mp.Value('i', 0)
         self.n_frames_queued_a = mp.Value('i', 0)
@@ -62,7 +62,7 @@ class Microphone(mproc):
             return None
 
         ts = now()
-        dat = np.frombuffer(data, dtype=np.int16)
+        dat = np.frombuffer(data, dtype=np.float32)
         if self._saving.value:
             self.audio_buffer.put([dat, ts])
             self.current_audio_q.put(dat)
@@ -72,13 +72,13 @@ class Microphone(mproc):
         try:
             self.setup_audio()
 
-            empty_a = np.zeros(self.hdf_resize_audio, dtype=np.int16)
+            empty_a = np.zeros(self.hdf_resize_audio, dtype=np.float32)
             empty_a_t = np.zeros(self.hdf_resize_audio_ts, dtype=np.float64)
 
             with h5py.File(self.save_path, 'a') as hfile:
                 if 'audio' not in hfile:
                     ds_a = hfile.create_dataset('audio', data=empty_a,
-                                                compression='lzf', dtype=np.int16,
+                                                compression='lzf', dtype=np.float32,
                                                 maxshape=(None,))
                 else:
                     ds_a = hfile['audio']
@@ -93,7 +93,7 @@ class Microphone(mproc):
             self.hdf_idx_a = 0
             n_dumped_audio = 0
 
-            self.save_audio_buffer = np.zeros(self.save_audio_buffer_shape, dtype=np.int16)
+            self.save_audio_buffer = np.zeros(self.save_audio_buffer_shape, dtype=np.float32)
             self.save_audio_buffer_t = np.zeros(self.save_audio_buffer_ts_shape, dtype=np.float64)
 
             self._saving.value = 1
@@ -104,7 +104,7 @@ class Microphone(mproc):
                 try:
                     aud, ts = self.audio_buffer.get(block=False)
                     if len(aud) < config.audio_stream_chunk:
-                        aud = np.pad(aud, (0, config.audio_stream_chunk - len(aud)), 'constant', constant_values=(0, 0)).astype(np.int16)
+                        aud = np.pad(aud, (0, config.audio_stream_chunk - len(aud)), 'constant', constant_values=(0, 0)).astype(np.float32)
                     self.save_audio_buffer[n_dumped_audio : n_dumped_audio + config.audio_stream_chunk] = aud
                     self.save_audio_buffer_t[n_dumped_audio : n_dumped_audio + config.audio_stream_chunk, :] = ts
                     n_dumped_audio += config.audio_stream_chunk
@@ -173,7 +173,7 @@ class Microphone(mproc):
                 pass
                
     def get_current_audio(self):            
-        return np.frombuffer(self.current_audio_mp.get_obj(), dtype=np.int16)
+        return np.frombuffer(self.current_audio_mp.get_obj(), dtype=np.float32)
 
     def end(self):
         self.kill_flag.value = 1

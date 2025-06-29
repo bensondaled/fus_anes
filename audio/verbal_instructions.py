@@ -11,6 +11,8 @@ from fus_anes.util import save
 import sounddevice as sd
 import soundfile as sf
 
+sd.default.device = config.audio_in_ch_out_ch
+
 def play_audio(filename):
     data, samplerate = sf.read(filename)
     sd.play(data, samplerate)
@@ -48,7 +50,7 @@ class SqueezeInstructions(mproc):
         return path
 
     def play(self):
-        save('squeeze', dict(event=pad_str('play'), isi=-1.0), self.saver_buffer)
+        save('squeeze', dict(event='play', isi=-1.0), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -65,7 +67,7 @@ class SqueezeInstructions(mproc):
 
             data, samplerate = sf.read(clip)
             isi = self.interval[0] + np.random.normal(*self.interval[1])
-            save('squeeze', dict(event=pad_str(clip), isi=isi), self.saver_buffer)
+            save('squeeze', dict(event=os.path.split(clip)[-1], isi=isi), self.saver_buffer)
 
             sd.play(data, samplerate)
             sd.wait()
@@ -91,7 +93,7 @@ class BaselineEyes(mproc):
         self.kill_flag = mp.Value('b', 0)
     
     def play(self):
-        save('bl_eyes', dict(event=pad_str('play')), self.saver_buffer)
+        save('bl_eyes', dict(event='play'), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -103,7 +105,7 @@ class BaselineEyes(mproc):
             if self.kill_flag.value:
                 break
             data, samplerate = sf.read(path)
-            save('bl_eyes', dict(event=pad_str(path)), self.saver_buffer)
+            save('bl_eyes', dict(event=os.path.split(path)[-1]), self.saver_buffer)
             sd.play(data, samplerate)
             sd.wait()
             time.sleep(self.dur)

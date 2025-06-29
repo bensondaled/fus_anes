@@ -72,7 +72,7 @@ audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 audio_hdf_resize = audio_save_chunk * 10
 audio_device_idx = 0 # use audio_probe script to identify mics
-n_audio_display = 0.5 # secs
+n_audio_display = 3.0 # secs
 
 # TCI
 drug = 'propofol'

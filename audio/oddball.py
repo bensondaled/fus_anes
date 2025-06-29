@@ -10,6 +10,8 @@ from fus_anes.util import save
 import sounddevice as sd
 import soundfile as sf
 
+sd.default.device = config.audio_in_ch_out_ch
+
 if config.THREADS_ONLY:
     mproc = threading.Thread
 else:

@@ -438,7 +438,10 @@ class LiveTCI(mp.Process):
 
         self.user_request_queue.put(('infuse', [rate, dur]))
     
-    def goto(self, target, **kw):
+    def goto(self, target, clear_queue=True, **kw):
+        if clear_queue:
+            self.clear_instruction_queue()
+
         save('tci_cmd', dict(kind='goto', dose=None, ce_target=target, dur=None), self.saver_buffer)
         self.user_request_queue.put(('goto', [target, kw]))
 
