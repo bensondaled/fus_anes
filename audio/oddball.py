@@ -50,12 +50,17 @@ class Oddball(mproc):
         n_deviants = int(total_stimuli * oddball_ratio)
         n_standards = total_stimuli - n_deviants
 
-        print(n_standards, n_deviants)
-
         sequence = np.array(['s'] * n_standards + ['d'] * n_deviants)
-        while np.any((sequence[:-1]=='d') & (sequence[1:]=='d')):
+        n_allowed_consecutive = 0
+        max_iters = 100000
+        n_iters = 0
+        while np.sum((sequence[:-1]=='d') & (sequence[1:]=='d')) > n_allowed_consecutive:
             np.random.shuffle(sequence)
-            print(sequence)
+            n_iters += 1
+            if n_iters > max_iters:
+                n_iters = 0
+                n_allowed_consecutive += 1
+        print(f'Allowed {n_allowed_consecutive} consecutive oddballs')
         sequence = np.append(np.array(['s'] * config.oddball_n_standard_start),  sequence)
 
         wait_ms = isi_ms - tone_duration_ms

@@ -328,7 +328,7 @@ class EEG(tcls):
                 continue
             
             if self.first_spect_time.value == -1:
-                self.first_spect_time.value = dat[0, -2] # uses wall clock now() taken at eeg's acquisition as the reference time
+                self.first_spect_time.value = dat[0, -3] # uses wall clock now() taken at eeg's acquisition as the reference time
 
             dat = dat[:, :-self.n_timefields] # remove timestamp columns
 
