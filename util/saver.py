@@ -10,8 +10,15 @@ import tables
 import numpy as np
 import pandas as pd
 
-from fus_anes.util import now, now2
+from fus_anes.util import now
 import fus_anes.config as config
+
+def save(label, data, buffer, time_data=None, columns=None):
+    if time_data is None:
+        timestamp, perfstamp, lslstamp = now()
+    else:
+        timestamp, perfstamp, lslstamp = time_data
+    buffer.put([label, data, timestamp, perfstamp, lslstamp, columns])
 
 def parse_config_dict(d):
     exclude = ['__name__',
@@ -49,23 +56,15 @@ class Saver(mp.Process):
         self.session_obj = session_obj
         self.data_file = data_file
         self.buffer_size = buffer_size
-        
         self.error_queue = error_queue
 
-        self.buffer = mp.Queue() # grab bag for anything asked to be saved
-        self.kill_flag = mp.Value('b', False)
-
+        self.buffer = mp.Queue() # all items to save go through this
+        self.running = mp.Value('b', False)
         self.start()
 
-    def write(self, label, data, timestamp=None, clockstamp=None, columns=None):
-        if self.kill_flag.value:
-            return
-
-        timestamp = timestamp or now()
-        clockstamp = clockstamp or now2()
-        self.buffer.put([label, data, timestamp, clockstamp, columns])
-
     def run(self):
+        self.running.value = True
+
         try:
             with pd.HDFStore(self.data_file, mode='a') as f:
                 f.put('code', pd.Series(self.session_obj.get_code_txt()))
@@ -74,24 +73,22 @@ class Saver(mp.Process):
             field_buffers = {} # categories items from self.buffer, then writes
 
             while True:
-                if self.buffer.empty() and self.kill_flag.value:
+                record = self.buffer.get(block=True, timeout=None)
+
+                if record is None: # sentinel to end
                     break
-                   
-                try:
-                    record = self.buffer.get(block=False)
-                except queue.Empty:
-                    continue
                 
-                label, data, ts, cs, columns = record
+                label, data, ts, ps, ls, columns = record
 
                 if not isinstance(data, pd.DataFrame):
-                    idx = np.atleast_1d(np.squeeze([ts]))
+                    idx = np.atleast_1d(np.squeeze([ls]))
                     data = pd.DataFrame(data, columns=columns, index=idx)
                 elif isinstance(data, pd.DataFrame):
-                    data.set_index([[ts]*len(data)], inplace=True)
+                    data.set_index([[ls]*len(data)], inplace=True)
 
                 data.loc[:, 'session'] = self.session_id
-                data.loc[:, 'clockstamp'] = cs
+                data.loc[:, 'pc_stamp'] = ps
+                data.loc[:, 'time_stamp'] = ts
 
                 # add to label-specific buffer
                 if label in field_buffers:
@@ -111,6 +108,8 @@ class Saver(mp.Process):
                 
         except Exception as e:
             self.error_queue.put(f'Saver: {str(e)}')
+
+        self.running.value = False
             
     def flush_buffer(self, field_buffers, label):
         field_buffer = field_buffers[label]
@@ -124,12 +123,14 @@ class Saver(mp.Process):
             with pd.HDFStore(self.data_file, mode='a') as f:
                 f.append(label, to_write,
                               index=False,
-                              data_columns=['session','clockstamp'],
+                              data_columns=['session','time_stamp'],
                               complevel=0)
             field_buffers[label] = []
         except Exception as e:
             self.error_queue.put(f'Saver: {str(e)}')
                     
     def end(self):
-        self.kill_flag.value = True
+        self.buffer.put(None) # sentinel flag to end
+        while self.running.value:
+            time.sleep(0.100)
 

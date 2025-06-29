@@ -6,12 +6,20 @@ import numpy as np
 import multiprocessing as mp
 
 import fus_anes.config as config
+from fus_anes.util import save
 
-from psychopy.sound import Sound
-from psychopy.core import wait
-#import psychtoolbox as ptb
+import sounddevice as sd
+import soundfile as sf
 
-# TODO: incorporate saver
+def play_audio(filename):
+    data, samplerate = sf.read(filename)
+    sd.play(data, samplerate)
+    sd.wait()
+
+def pad_str(s):
+    # for saving
+    min_length = 50
+    return s.ljust(min_length)
 
 if config.THREADS_ONLY:
     mproc = threading.Thread
@@ -19,12 +27,14 @@ else:
     mproc = mp.Process
 
 class SqueezeInstructions(mproc):
-    def __init__(self, with_nums=True):
+    def __init__(self, with_nums=True, saver_buffer=None):
         super(SqueezeInstructions, self).__init__()
         self.name = config.name.lower()
         self.audio_path = os.path.join(config.verbal_instructions_path, self.name)
         self.interval = config.verbal_instruction_interval
         self.with_nums = with_nums
+        
+        self.saver_buffer = saver_buffer
         
         self.is_playing = mp.Value('b', 0)
         self.kill_flag = mp.Value('b', 0)
@@ -38,6 +48,7 @@ class SqueezeInstructions(mproc):
         return path
 
     def play(self):
+        save('squeeze', dict(event=pad_str('play'), isi=-1.0), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -52,15 +63,14 @@ class SqueezeInstructions(mproc):
             else:
                 clip = self.get_clip(None)
 
-            s = Sound(clip)
-            dur = s.getDuration()
-            
+            data, samplerate = sf.read(clip)
             isi = self.interval[0] + np.random.normal(*self.interval[1])
+            save('squeeze', dict(event=pad_str(clip), isi=isi), self.saver_buffer)
 
-            s.play() # To do: consider scheduling this play so its timing is more accurate
-            wait(dur)
+            sd.play(data, samplerate)
+            sd.wait()
+            time.sleep(isi)
 
-            wait(isi)
             idx += 1
         self.is_playing.value = 0
 
@@ -70,15 +80,18 @@ class SqueezeInstructions(mproc):
         #    time.sleep(0.025)
 
 class BaselineEyes(mproc):
-    def __init__(self, names=['closed.mp3', 'open.mp3'], n_reps=2, dur=60.0):
+    def __init__(self, names=['closed.mp3', 'open.mp3'], n_reps=2, dur=60.0,
+                 saver_buffer=None):
         super(BaselineEyes, self).__init__()
         self.clip_paths = [os.path.join(config.baseline_audio_path, name) for name in names]
         self.n_reps = n_reps
         self.dur = dur
+        self.saver_buffer = saver_buffer
         self.playing = mp.Value('b', 0)
         self.kill_flag = mp.Value('b', 0)
     
     def play(self):
+        save('bl_eyes', dict(event=pad_str('play')), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -89,11 +102,11 @@ class BaselineEyes(mproc):
         for path in paths:
             if self.kill_flag.value:
                 break
-            s = Sound(path)
-            dur = s.getDuration()
-            s.play()
-            wait(dur)
-            wait(self.dur)
+            data, samplerate = sf.read(path)
+            save('bl_eyes', dict(event=pad_str(path)), self.saver_buffer)
+            sd.play(data, samplerate)
+            sd.wait()
+            time.sleep(self.dur)
         self.playing.value = 0
 
     def end(self):

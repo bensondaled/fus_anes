@@ -5,7 +5,7 @@ import time
 import multiprocessing as mp
 import queue
 
-from fus_anes.util import now, now2
+from fus_anes.util import now
 import fus_anes.config as config
 
 if config.THREADS_ONLY:
@@ -169,7 +169,7 @@ class Capnostream(mp.Process):
             byt = self.port.read(1)
             if byt == b'\x85':
                 break
-        ts, cs = now(), now2()
+        ts = now() # THIS WILL NEED ADJUSTING IF YOU START USING CAPNO AGAIN: IT IS NOW 3 VALUES
         bodysize = int.from_bytes(self.port.read(1))
         body = self.port.read(bodysize)
         checksum = self.port.read(1)
@@ -186,12 +186,7 @@ class Capnostream(mp.Process):
     def empty_save_buffer(self, N=0):
         if self.saver_obj_buffer is None:
             return
-        self.saver_obj_buffer.put(['co2',
-                                   self.save_buffer[-N:, :-2].copy(),
-                                   self.save_buffer[-N:, -2].copy(),
-                                   self.save_buffer[-N:, -1].copy(),
-                                   ['wave_msg_num', 'co2_value', 'fast_status']],
-                                  )
+        raise Exception('if you start using capno again, go copy how EEG saves out its buffer')
         self.n_new = 0
         
     def get_current(self):            

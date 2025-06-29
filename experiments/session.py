@@ -9,9 +9,9 @@ import logging
 import time
 from datetime import datetime as dtm
 
-from fus_anes.hardware import EEG, Pump, Camera, Capnostream, Microphone
-from fus_anes.verbal_instructions import SqueezeInstructions, BaselineEyes
-from fus_anes.util import Saver, multitaper_spectrogram, now, now2
+from fus_anes.hardware import EEG, Pump, Camera, Microphone
+from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball
+from fus_anes.util import Saver, multitaper_spectrogram, now, save
 from fus_anes.tci import LiveTCI
 import fus_anes.config as config
 
@@ -32,33 +32,40 @@ class Session():
     def run(self):
         self.error_queue = mp.Queue()
         self.saver = Saver(session_id=self.name, data_file=self.data_file, session_obj=self, error_queue=self.error_queue)
-        self.tci = LiveTCI(prior_tcm=self.get_prior_tcm())
+        self.tci = LiveTCI(prior_tcm=self.get_prior_tcm(), error_queue=self.error_queue, saver_buffer=self.saver.buffer)
         self.squeeze = None
         self.baseline_eyes = None
-        self.pump = Pump(error_queue=self.error_queue, saver=self.saver)
+        self.oddball = None
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
         self.mic = Microphone(self.tech_name, error_queue=self.error_queue)
-        self.capnostream = Capnostream(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
         self.eeg = EEG(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
-        trun = now()
+        trun = now(minimal=True)
         self.running = trun
         self.eeg.start_processing()
     
     def toggle_baseline(self):
         if self.baseline_eyes is None:
-            self.baseline_eyes = BaselineEyes()
+            self.baseline_eyes = BaselineEyes(saver_buffer=self.saver.buffer)
             self.baseline_eyes.play()
-        elif self.baseline_eyes.playing == False: # finished playing
+        else:
             self.baseline_eyes.end()
             self.baseline_eyes = None
 
     def toggle_squeeze(self):
         if self.squeeze is None:
-            self.squeeze = SqueezeInstructions()
+            self.squeeze = SqueezeInstructions(saver_buffer=self.saver.buffer)
             self.squeeze.play()
         else:
             self.squeeze.end()
             self.squeeze = None
+    
+    def toggle_oddball(self):
+        if self.oddball is None:
+            self.oddball = Oddball(saver_buffer=self.saver.buffer)
+            self.oddball.play()
+        else:
+            self.oddball.end()
+            self.oddball = None
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]
@@ -81,33 +88,7 @@ class Session():
     def add_marker(self, info):
         ts, txt = info
         self.markers.append([ts, txt])
-        self.saver.write('markers', dict(t=ts, text=f'{txt:<100}'))
-
-    def give_bolus(self, info):
-        if config.TESTING:
-            logging.info('Delivering bolus:', info)
-
-        if self.is_bolusing is not False:
-            logging.warning('Cannot bolus while bolusing, bolus canceled.')
-            return
-
-        t, dose = info
-        if dose == 0.0:
-            return
-        if dose > config.max_bolus:
-            dose = config.max_bolus
-            logging.warning(f'Reduced bolus to maximum which is {config.max_bolus}')
-        
-        # TODO: implement bolus
-
-    def give_infusion(self, info, force=False, mlmin=False):
-        # given in mcg/kg/min (unless mlmin==True)
-        
-        if config.TESTING:
-            logging.info('Delivering infusion:', info)
-        
-        # TODO: implement infusion
-
+        save('markers', dict(t=ts, text=f'{txt:<100}'), self.saver.buffer)
 
     def retrieve_errors(self):
         errs = []
@@ -129,8 +110,8 @@ class Session():
 
     def end(self):
         self.running = False
-        self.saver.write('tci_end', dict(tcm=json.dumps(self.tci.export())))
-        to_end = [self.eeg, self.capnostream, self.saver, self.pump, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze]
+        save('tci_end', dict(tcm=json.dumps(self.tci.export())), self.saver.buffer)
+        to_end = [self.eeg, self.saver, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze, self.oddball]
         for te in to_end:
             print(te)
             if te is None:

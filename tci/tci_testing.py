@@ -1,6 +1,6 @@
 ##
 import fus_anes.config as config
-from fus_anes.tci import TCI_Propofol as TCI
+from fus_anes.tci import TCI_Propofol as TCI, LiveTCI
 from fus_anes.tci.tci_util import bolus_to_infusion, simulate, compute_bolus_to_reach_ce, go_to_target, mlmin_mcgkgmin
 
 age = config.age
@@ -70,30 +70,61 @@ def implement(t, rates, durs, vals):
         t.infuse(r)
         vals += collect_vals(t, dur=d)
 
-rates, durs = go_to_target(t, 0.5, duration=4*60, new_target_travel_time=90.0)
+implement(t, [0], [10*60], vals)
+
+rates, durs = go_to_target(t, 1.4, duration=4*60, new_target_travel_time=90.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 1.4, duration=5*60)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 1.4, duration=2.5*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 1.0, duration=5*60, new_target_travel_time=2*60)
+rates, durs = go_to_target(t, 2.2, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 2.2, duration=6*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 1.1, duration=3*60)
+rates, durs = go_to_target(t, 3.0, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 3.0, duration=6*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 1.2, duration=3*60)
+rates, durs = go_to_target(t, 3.8, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 3.8, duration=6*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 1.3, duration=3*60)
+rates, durs = go_to_target(t, 2.6, duration=5*60, new_target_travel_time=60.0)
 implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 2.6, duration=6*60)
+implement(t, rates, durs, vals)
+
+rates, durs = go_to_target(t, 1.8, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 1.8, duration=6*60)
+implement(t, rates, durs, vals)
+
+rates, durs = go_to_target(t, 1.0, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 1.0, duration=6*60)
+implement(t, rates, durs, vals)
+
+implement(t, [0], [40*60], vals)
 
 # pretend now they reached our desired state, so I dynamically say hey hold it here for a while
-rates, durs = go_to_target(t, t.level, duration=5*60)
-implement(t, rates, durs, vals)
+#rates, durs = go_to_target(t, t.level, duration=5*60)
+#implement(t, rates, durs, vals)
 
 cp, ce = np.array(vals).T
 pl.figure()
-pl.plot(np.arange(len(cp))/60, cp, label='cp', color='gold', ls='--')
-pl.plot(np.arange(len(ce))/60, ce, label='ce', color='gold',)
+#pl.plot(np.arange(len(cp))/60, cp, label='cp', color='lightseagreen', ls='--')
+pl.plot(np.arange(len(ce))/60, ce, label='ce', color='lightseagreen', lw=3)
 pl.legend(); pl.grid(True)
 
-## SANDBOX: toying with making LiveTCI
+## Test 4: LiveTCI
+lt = LiveTCI()
+lt.goto(0.4)
+pl.plot(*lt.history)
+pl.plot(*lt.get_projection())
+pl.plot(*lt.simulation(infusion=0))
 ##

@@ -5,10 +5,21 @@ import threading
 import multiprocessing as mp
 import time
 import os
+import sys
 import queue
 
-from fus_anes.util import now, now2
+np.set_printoptions(suppress=True, threshold=sys.maxsize, precision=15) # for saving timestamp text
+
+from fus_anes.util import now
 import fus_anes.config as config
+
+def a2s(a):
+    return np.array2string(a,
+                           precision=15,
+                           separator=',',
+                           floatmode='maxprec',
+                           formatter={'float_kind': lambda x: f'{x:.15f}'},
+                           )
 
 def list_cameras():
     index = 0
@@ -53,12 +64,19 @@ class Camera(mproc):
 
     def run(self):
         def new_vw(idx=0):
-            path = os.path.join(self.save_path, f'{self.name}_camera_{idx}.mp4')
+            if isinstance(config.fourcc, str) and len(config.fourcc)==4:
+                fourcc = cv2.VideoWriter_fourcc(*config.fourcc)
+            else:
+                fourcc = -1
+
+            path = os.path.join(self.save_path, f'{self.name}_camera_{idx}.{config.mov_ext}')
             vw = cv2.VideoWriter(path, 
-            -1,
-            30, # frame rate, relatively irrelevant bc will use timestamps
-            (config.cam_frame_size[1], config.cam_frame_size[0]),
-            isColor=True)
+                fourcc,
+                30, # frame rate, relatively irrelevant bc will use timestamps
+                (int(config.cam_frame_size[1]*config.cam_resize), int(config.cam_frame_size[0]*config.cam_resize)),
+                isColor=True)
+            if not vw.isOpened():
+                self.error_queue.put('Camera videowriter didnt open')
             return vw
     
         try:
@@ -66,37 +84,35 @@ class Camera(mproc):
             finished = False # video, audio
             self._on.value = 1
             
-            ts_buffer = np.zeros(1000).astype(float)
+            n_ts_fields = len(now())
+            ts_buffer = np.zeros([1000, n_ts_fields], dtype=float)
             ts_buffer_idx = 0
             
             start_time = None
             vw_idx = 0
             vw = new_vw(vw_idx)
             
-            def astr(x):
-                return '\n'.join([f'{i:0.15f}' for i in x]) + '\n'
-            
             while True:
                 # video
                 try:
                     frame, ts = self.frame_buffer.get(block=False)
                     vw.write(frame)
-                    ts_buffer[ts_buffer_idx] = ts
+                    ts_buffer[ts_buffer_idx, :] = ts
                     ts_buffer_idx += 1
                     self.n_frames_saved.value += 1
                     
                     if start_time is None:
-                        start_time = ts
+                        start_time = ts[0]
                     
                     if ts_buffer_idx == len(ts_buffer):
                         with open(self.save_path_ts, 'a') as f:
-                            f.write(astr(ts_buffer))
+                            f.write(a2s(ts_buffer))
                         ts_buffer_idx = 0
                         
-                    if ts - start_time > config.cam_file_duration:
+                    if ts[0] - start_time > config.cam_file_duration:
                         vw.release()
                         vw_idx += 1
-                        start_time = ts
+                        start_time = ts[0]
                         vw = new_vw(vw_idx)
                     
                     #print(self.n_frames_captured.value, self.n_frames_saved.value)
@@ -108,7 +124,7 @@ class Camera(mproc):
                 
                 if finished:
                     with open(self.save_path_ts, 'a') as f:
-                        f.write(astr(ts_buffer[:ts_buffer_idx]))
+                        f.write(a2s(ts_buffer[:ts_buffer_idx]))
                     vw.release()
                     self._on.value = False
                     break
@@ -117,7 +133,7 @@ class Camera(mproc):
             
     def stream_video(self):
         if config.cam_resize not in [None, 1]:
-            resize = 1/config.cam_resize
+            resize = config.cam_resize
         else:
             resize = False
 
@@ -157,7 +173,7 @@ class Camera(mproc):
     def end(self):
         self.kill_flag.value = 1
         while self._on.value:
-            time.sleep(0.010)
+            time.sleep(0.100)
             
 if __name__ == '__main__':
     cam = Camera('mytest', error_queue=mp.Queue())

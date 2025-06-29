@@ -215,6 +215,7 @@ class Interface(qtw.QWidget):
         self.l_sesh = qtw.QLabel('(no session)')
         self.b_run_baseline = qtw.QPushButton('Baseline')
         self.b_run_squeeze = qtw.QPushButton('Squeeze')
+        self.b_run_oddball = qtw.QPushButton('Oddball')
         self.b_clear_tci_queue = qtw.QPushButton('Clear TCI')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
@@ -246,6 +247,7 @@ class Interface(qtw.QWidget):
         row1_toolbar_items = [1,
                               self.b_run_baseline, 5,
                               self.b_run_squeeze, 5,
+                              self.b_run_oddball, 5,
                               self.b_marker, self.t_marker, 2,
                               self.b_lor, 1, self.b_ror, 1,
                               20,
@@ -843,15 +845,6 @@ class VideoMonitor(qtw.QWidget):
         pw.setYRange(-15000, 15000)
         pw.enableAutoRange(enable=False)
         
-        # co2 plot
-        pw2 = tlayout.addPlot(row=1, col=0)
-        pw2.setMouseEnabled(x=False, y=False)
-        cdata = np.zeros(config.capnostream_live_buffer_length)
-        xvals = np.arange(len(cdata))
-        self.c_plot_obj = pw2.plot(xvals, cdata, pen=dict(color='black'), clear=True)
-        pw2.setYRange(-1, 80)
-        pw2.enableAutoRange(enable=False)
-        
         self.layout.addWidget(tlayout)
         self.layout.addWidget(self.label)
         self.setLayout(self.layout)
@@ -869,7 +862,3 @@ class VideoMonitor(qtw.QWidget):
         data = data[::10]
         xvals = np.arange(len(data))
         self.a_plot_obj.setData(xvals, data)
-        
-    def set_co2(self, data):
-        xvals = np.arange(len(data))
-        self.c_plot_obj.setData(xvals, data)

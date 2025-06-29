@@ -38,6 +38,7 @@ class Controller():
         self.ui.b_sesh.clicked.connect(self.session_toggle)
         self.ui.b_run_baseline.clicked.connect(self.toggle_baseline)
         self.ui.b_run_squeeze.clicked.connect(self.toggle_squeeze)
+        self.ui.b_run_oddball.clicked.connect(self.toggle_oddball)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
         self.ui.b_project.clicked.connect(self.project)
@@ -157,25 +158,25 @@ class Controller():
     
     @require_session
     def mark(self, event):
-        t = now()
+        t = now(minimal=True)
         text = self.ui.t_marker.text()
         self.session.add_marker([t, text])
     
     @require_session
     def lor(self, event):
-        t = now()
+        t = now(minimal=True)
         text = 'lor'
         self.session.add_marker([t, text])
     
     @require_session
     def ror(self, event):
-        t = now()
+        t = now(minimal=True)
         text = 'ror'
         self.session.add_marker([t, text])
     
     @require_session
     def bolus(self, event):
-        t = now()
+        t = now(minimal=True)
         dose = self.ui.t_bolus.text()
         try:
             dose = int(dose)
@@ -197,20 +198,20 @@ class Controller():
         i = str2num(self.ui.t_infusion.text())
 
         sim_time, sim_vals = self.session.tci.simulation(infusion=i, bolus=b)
-        sim_time += now()
+        sim_time += now(minimal=True)
         sim_time -= self.session.running
         self.ui.update_tci_data(sim_time, sim_vals, kind='sim')
     
     @require_session
     def project(self, event):
         proj_time, proj_vals = self.session.tci.get_projection()
-        proj_time += now()
+        proj_time += now(minimal=True)
         proj_time -= self.session.running
         self.ui.update_tci_data(proj_time, proj_vals, kind='proj')
 
     @require_session
     def infuse(self, event):
-        t = now()
+        t = now(minimal=True)
         dose = str2num(self.ui.t_infusion.text())
         self.session.tci.infuse(dose)
 
@@ -221,7 +222,7 @@ class Controller():
 
     @require_session
     def update_timeline(self):
-        dt = now() - self.session.running
+        dt = now(minimal=True) - self.session.running
         self.ui.update_timeline(dt) # moving ticker
         
         #boluses = [t-self.session.running for t, d in self.session.boluses]
@@ -256,7 +257,7 @@ class Controller():
     
     @require_session
     def reset_xlim(self, *args, **kw):
-        dt = now() - self.session.running
+        dt = now(minimal=True) - self.session.running
         
         x0 = max(0, dt - config.timeline_duration + config.timeline_advance)
         x1 = max(x0+config.timeline_duration, dt + config.timeline_advance)
@@ -290,10 +291,13 @@ class Controller():
 
         overflow = self.eeg_raw_idx + nadd - self.eeg_raw_dat.shape[0]
         if overflow > 0:
-            fits = max(0, self.eeg_raw_dat.shape[0] - self.eeg_raw_idx)
-            self.eeg_raw_dat[self.eeg_raw_idx:] = add[:fits]
-            self.eeg_raw_dat[0 : overflow] = add[fits:]
-            self.eeg_raw_idx = overflow
+            try:
+                fits = max(0, self.eeg_raw_dat.shape[0] - self.eeg_raw_idx)
+                self.eeg_raw_dat[self.eeg_raw_idx:] = add[:fits]
+                self.eeg_raw_dat[0 : overflow] = add[fits:]
+                self.eeg_raw_idx = overflow
+            except:
+                pass # just rare cases where delay causes too much to be in overflow. easiest to just let it pass and move on
         else:
             self.eeg_raw_dat[self.eeg_raw_idx : self.eeg_raw_idx + nadd] = add
             self.eeg_raw_idx += nadd
@@ -351,6 +355,14 @@ class Controller():
             self.ui.b_run_squeeze.setText('Stop squeeze')
         else:
             self.ui.b_run_squeeze.setText('Squeeze')
+    
+    @require_session
+    def toggle_oddball(self, event):
+        self.session.toggle_oddball()
+        if self.session.oddball is not None:
+            self.ui.b_run_oddball.setText('Stop oddball')
+        else:
+            self.ui.b_run_oddball.setText('Oddball')
     
     @require_session
     def update_filters(self):
@@ -421,9 +433,6 @@ class Controller():
             audio = self.session.mic.get_current_audio()
             self.ui.vm.set_audio(audio)
             
-            co2 = self.session.capnostream.get_current()
-            self.ui.vm.set_co2(co2)
-
     def update_spect_freq_selects(self, chan_name='', sel_idx=0, updated='txts'):
 
         sl_obj = self.ui.spect_freq_selects[f'{chan_name}'][sel_idx]

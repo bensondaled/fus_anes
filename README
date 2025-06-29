@@ -1,0 +1,2 @@
+
+for lsl: conda install -c conda-forge liblsl  and then  pip install pylsl

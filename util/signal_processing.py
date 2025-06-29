@@ -1,6 +1,5 @@
 import numpy as np
-from scipy.signal import resample, butter, lfilter, iirnotch, tf2zpk, zpk2sos, sosfilt, sosfilt_zi
-from scipy import convolve
+from scipy.signal import resample, butter, lfilter, iirnotch, tf2zpk, zpk2sos, sosfilt, sosfilt_zi, convolve
 from numpy.lib.stride_tricks import as_strided as ast
 
 import fus_anes.config as config

@@ -27,7 +27,6 @@ verbal_instructions_n_prepare = 120
 
 # EEG acquisition
 fs = 500 # Hz
-eeg_n_timefields = 4
 chan_reference = passive_reference_electrode_idx 
 eeg_memory_length = 5000 # samples
 read_buffer_length = 25 # samples
@@ -39,6 +38,7 @@ spect_update_interval = 5000 # samples (use multiple of fs and <eeg_memory_lengt
 spect_memory_length = 60*60*3 # seconds
 spect_freq_downsample = 5
 save_buffer_length = 20000 # samples, mult of read_buf_len
+eeg_n_timefields = 5 # 3 for the now() output, 2 for the added inlet/offset
 
 # EEG display
 n_live_chan = 2
@@ -56,13 +56,18 @@ ratio_smooth_win_size = 5
 spect_log = True
 
 # Misc display
-timeline_duration = 10*60 # secs, default time range to show
+timeline_duration = 20*60 # secs, default time range to show
 timeline_advance = 2.5*60 # secs, how much to jump in advance when you hit the end of timeline
 
 # Camera
 cam_frame_size = [1080, 1920, 3]
-cam_resize = 6
+cam_resize = 1/5
 cam_file_duration = 10*60 # secs
+fourcc = 'XVID'
+mov_ext = 'avi' # xvid=avi, -1=mp4
+
+# Sound
+audio_in_ch_out_ch = [2, 3]
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 audio_hdf_resize = audio_save_chunk * 10
@@ -85,8 +90,9 @@ hold_level_duration = 15*60 # secs
 drug_mg_ml = 10.0 # 10mg/ml for propofol
 goto_target_step_size = 15.0
 
-# CO2
-capnostream_port = 'COM7' # Device manager: "USB Serial Port"
-capnostream_fs = 20 # Hz, determined by hardware
-capnostream_save_buffer_length = int(capnostream_fs * 10)
-capnostream_live_buffer_length = 100
+# Oddball
+oddball_audio_path = '/Users/bdd/code/fus_anes/media/oddball_audio/'
+oddball_deviant_ratio = 0.15
+oddball_isi_ms = 400
+oddball_duration_min = 3.0
+oddball_n_standard_start = 15

@@ -56,7 +56,7 @@ class TCI():
             for k,v in self.prior_tcm.items():
                 setattr(self, k, v)
             prior_ts = self.prior_tcm['ts']
-            dt = int(round(now() - prior_ts))
+            dt = int(round(now(minimal=True) - prior_ts))
             for _ in range(dt):
                 self.wait(1.0)
             return

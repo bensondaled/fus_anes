@@ -10,7 +10,7 @@ import bisect
 import fus_anes.config as config
 from fus_anes.hardware import Pump
 from fus_anes.tci import TCI_Propofol, TCI_Ketamine
-from fus_anes.util import now, now2
+from fus_anes.util import now, handle_errs, save
 
 if config.drug.lower() == 'propofol':
     TCI = TCI_Propofol
@@ -299,8 +299,13 @@ class LiveTCI(mp.Process):
                  simulation_interval=5.0,
                  hold_keep_ahead_time=120.0,
                  maintain_time_step=60*6.0,
+                 saver_buffer=None,
+                 error_queue=None,
                  **tci_kw):
         super(LiveTCI, self).__init__()
+
+        self.saver_buffer = saver_buffer
+        self.error_queue = error_queue
 
         self.tci_kw = tci_kw
         self.new_instruction_delay = new_instruction_delay # the purpose of this is: when a brand new instruction is sent, there's often overhead getting it into the line and immediately implemented at this very moment. This would be fine, except that this instruction may have contingencies that follow it, for example a stop time meant to be exactly n milliseconds after the first move. If we just delay the start of the first move a bit, then both instructions can be processed and placed in the queue, and the first one will start on time thus making the interval between them more accurate.
@@ -367,8 +372,9 @@ class LiveTCI(mp.Process):
             htime = np.arange(len(hist)) * self.history_interval + t0
             return htime, hist
         except:
-            return [], []
+            return np.array([]), np.array([])
     
+    @handle_errs
     def get_projection(self, return_obj=False):
         # projection vs simulation: projection plays out what happens with queued instructions, whereas simulation ignores those and does what a new infusion/bolus would do
         self.projection_request_flag.value = True
@@ -394,6 +400,7 @@ class LiveTCI(mp.Process):
         except:
             return []
     
+    @handle_errs
     def simulation(self, infusion=0.0, bolus=0.0):
         self.sim_infusion.value = infusion
         self.sim_bolus.value = bolus
@@ -405,34 +412,43 @@ class LiveTCI(mp.Process):
             return stime, sim
         except:
             return [], []
-
+    
+    @handle_errs
     def bolus(self, dose=None, ce=None, clear_queue=True):
         if (dose==0 and ce==None) or (dose==None and ce==0):
             return
+            
+        save('tci_cmd', dict(kind='bolus', dose=dose, ce_target=ce, dur=None), self.saver_buffer)
         
         if clear_queue:
             self.clear_instruction_queue()
 
         self.clear_instruction_queue()
         self.user_request_queue.put(('bolus', [dose, ce]))
-
+    
+    @handle_errs
     def infuse(self, rate, dur=None, clear_queue=True):
         '''Accepts rate in mcg/kg/min
         '''
+
+        save('tci_cmd', dict(kind='infuse', dose=rate, ce_target=None, dur=dur), self.saver_buffer)
+
         if clear_queue:
             self.clear_instruction_queue()
 
         self.user_request_queue.put(('infuse', [rate, dur]))
-
+    
     def goto(self, target, **kw):
+        save('tci_cmd', dict(kind='goto', dose=None, ce_target=target, dur=None), self.saver_buffer)
         self.user_request_queue.put(('goto', [target, kw]))
 
     def maintain(self, target, **kw):
+        save('tci_cmd', dict(kind='maintain', dose=None, ce_target=target, dur=None), self.saver_buffer)
         self.user_request_queue.put(('maintain', [target, kw]))
 
     def keep_history(self):
         history = []
-        last_update = now()
+        last_update = now(minimal=True)
         while not self.kill_flag.value:
 
             # provide history if user requested it
@@ -440,8 +456,8 @@ class LiveTCI(mp.Process):
                 self._history.put([np.array(history), self.t0])
                 self.history_request_flag.value = 0
 
-            if now() - last_update >= self.history_interval:
-                last_update = now()
+            if now(minimal=True) - last_update >= self.history_interval:
+                last_update = now(minimal=True)
                 history.append(self.level)
 
     def clear_instruction_queue(self):
@@ -473,7 +489,7 @@ class LiveTCI(mp.Process):
                     rate, dur = params
 
                     previous_rate = self.tci.infusion_rate
-                    start_time = now() #+ self.new_instruction_delay # leave out the delay here, because direct commands for infusions and boluses will otherwise be delayed
+                    start_time = now(minimal=True) #+ self.new_instruction_delay # leave out the delay here, because direct commands for infusions and boluses will otherwise be delayed
                     
                     # handle infusion start
                     instruction = (rate, start_time)
@@ -497,7 +513,7 @@ class LiveTCI(mp.Process):
                    
                     #self.infuse(self.tci.infusion_rate) # halt everything and keep infusing at current rate - had this commented out, may be the right thing to keep though
 
-                    start_time = now()
+                    start_time = now(minimal=True)
 
                     _, sim_obj = simulate(self.tci, [self.tci.infusion_rate], [self.new_instruction_delay], return_sim_object=True) # because the coming calculation may take some time, increment some simulated time from which to start the whole operation, so that when we have our computation complete and ready to implement, it is happening from the correct starting conditions
                     rates, durs = go_to_target(sim_obj, target, **kw)
@@ -513,8 +529,8 @@ class LiveTCI(mp.Process):
                     rates, durs = go_to_target(sim_obj, target, duration=5*60)
                     for rate, dur in zip(rates, durs):
 
-                        if cmd_time < now(): # this is purely a failsafe: if somehow the logic took too long and was planning to submit an instruction that's already overdue, just push all upcoming instructions from this plan forward to start now. it's not ideal because it means the calculations that went into it were run on "early" TCI info, but it's better than running something super late and assuming it ran on time
-                            cmd_time = now()
+                        if cmd_time < now(minimal=True): # this is purely a failsafe: if somehow the logic took too long and was planning to submit an instruction that's already overdue, just push all upcoming instructions from this plan forward to start now. it's not ideal because it means the calculations that went into it were run on "early" TCI info, but it's better than running something super late and assuming it ran on time
+                            cmd_time = now(minimal=True)
 
                         instruction = (rate, cmd_time)
                         self.instruction_queue.put(instruction)
@@ -533,7 +549,7 @@ class LiveTCI(mp.Process):
                     kw['new_target_travel_time'] = kw.pop('new_target_travel_time', config.goto_target_step_size)
                     
                     proj_time, p, proj_obj = self.get_projection(return_obj=True)
-                    start_time = now() + proj_time[-1]
+                    start_time = now(minimal=True) + proj_time[-1]
 
                     rates, durs = go_to_target(proj_obj, target, **kw)
                     cmd_time = start_time
@@ -550,7 +566,7 @@ class LiveTCI(mp.Process):
             # after processing all the new commands in the queue, check if we're holding a level. if we are, then we add commands into the queue if appropriate
             if is_holding_level is not False:
                 hold_target, hold_end_time = is_holding_level
-                if hold_end_time - now() <= self.hold_keep_ahead_time:
+                if hold_end_time - now(minimal=True) <= self.hold_keep_ahead_time:
                     print('sending maintain command')
                     self.maintain(hold_target)
 
@@ -566,7 +582,7 @@ class LiveTCI(mp.Process):
 
         rates = [self.tci.infusion_rate] + np.array(i_rates).tolist()
 
-        starts = np.append(now(), i_starts)
+        starts = np.append(now(minimal=True), i_starts)
         durs = np.diff(starts)
         if use_default_duration:
             remaining_time = self.default_projection_duration - np.sum(durs)
@@ -601,17 +617,17 @@ class LiveTCI(mp.Process):
         self._simulation.put(sim)
 
     def run(self):
-        self.pump = Pump()
+        self.pump = Pump(error_queue=self.error_queue)
         self.tci = TCI(**self.tci_kw)
-        self.t0 = now()
+        self.t0 = now(minimal=True)
 
         threading.Thread(target=self.process_user_requests, daemon=True).start()
         threading.Thread(target=self.keep_history, daemon=True).start()
 
         # This loop handles all direct instructions in a continuous ongoing manner. These are all uniformly specified by a rate and an absolute time to run that rate. To get instructions into that line, other threads can add to the instruction_queue, and this loop handles the rest (sorting and implementing them).
         queued_instructions = []
-        abs_start_time = now()
-        last_tci_cmd_time = now()
+        abs_start_time = now(minimal=True)
+        last_tci_cmd_time = now(minimal=True)
         while not self.kill_flag.value:
 
             # if requested, clear the instruction queue
@@ -630,8 +646,8 @@ class LiveTCI(mp.Process):
             
             # provide level if user requested it
             if self.level_request_flag.value:
-                self.tci.wait(now() - last_tci_cmd_time)
-                last_tci_cmd_time = now()
+                self.tci.wait(now(minimal=True) - last_tci_cmd_time)
+                last_tci_cmd_time = now(minimal=True)
                 self._level.value = self.tci.level
                 self.level_request_flag.value = 0
             
@@ -667,25 +683,25 @@ class LiveTCI(mp.Process):
             if len(queued_instructions) == 0:
                 continue
             next_due = queued_instructions[0][1]
-            if now() < next_due:
+            if now(minimal=True) < next_due:
                 continue
 
             #print('\n'.join([str((r, t-abs_start_time)) for r,t in queued_instructions]))
             
 
             rate, ts = queued_instructions.pop(0)
-            print(f'Running instruction: rate={rate}, at time {ts} (delay = {1000*(now()-ts):0.2f}ms)')
+            print(f'Running instruction: rate={rate}, at time {ts} (delay = {1000*(now(minimal=True)-ts):0.2f}ms)')
 
             # handle the pump
             mlmin = mlmin_mcgkgmin(mcgkgmin=rate)
             self.pump.infuse(mlmin)
+            save('pump', dict(rate=mlmin), self.saver_buffer)
 
             # handle the TCI object
-            self.tci.wait(now() - last_tci_cmd_time)
+            self.tci.wait(now(minimal=True) - last_tci_cmd_time)
             self.tci.infuse(rate)
-            last_tci_cmd_time = now()
-
-            # handle the saver: TODO
+            last_tci_cmd_time = now(minimal=True)
+            save('tci', dict(rate=rate), self.saver_buffer)
 
         
         self.pump.end()

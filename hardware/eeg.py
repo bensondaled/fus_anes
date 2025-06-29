@@ -5,10 +5,11 @@ import queue
 import time
 import warnings
 import os
+import sys
 import ctypes
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_byprop
 
-from fus_anes.util import LiveFilter, now, now2, multitaper_spectrogram
+from fus_anes.util import LiveFilter, now, multitaper_spectrogram, save
 MTS = multitaper_spectrogram
 import fus_anes.config as config
 
@@ -57,6 +58,9 @@ class EEG(tcls):
 
         assert spect_interval <= memory_length
         assert spect_interval % read_buffer_length == 0
+                
+        self.n_timefields = len(now()) + 2 # the 2 is for the inlet pull_sample time and the time correction
+        assert self.n_timefields - 2 == 3 # see assertion below where this matters
         
         # EEG hardware
         self.n_channels = n_channels
@@ -68,7 +72,7 @@ class EEG(tcls):
         # Raw trace memory storage
         self.n_live_chan = n_live_chan
         self.memory_dims = [memory_length,
-                            n_channels+config.eeg_n_timefields] # +4 for time
+                            n_channels+self.n_timefields] # +4 for time
         self.memory = np.zeros(self.memory_dims).astype(self.raw_dtype)
         self.memory_mp = mp.Array('d', self.memory.copy().ravel())
         self.memory_idx = mp.Value('i', 0)
@@ -80,7 +84,7 @@ class EEG(tcls):
                                  window_step=winstep,
                                  )
         # Spectrogram memory storage
-        dummy_input = self.memory[-self.spect_interval:, :-config.eeg_n_timefields].copy()
+        dummy_input = self.memory[-self.spect_interval:, :-self.n_timefields].copy()
         dummy, dummyt, dummyf = self.compute_dummy_spect(dummy_input)
         self.spect_memory_tf = [dummyt, dummyf]
         spect_memory_length = int(round(spect_memory_length / winstep)) # secs to windows
@@ -97,7 +101,7 @@ class EEG(tcls):
         # Saving
         self.eeg_queue = mp.Queue()
         self.save_buffer_length = save_buffer_length
-        self.save_buffer_dims = [save_buffer_length, n_channels + config.eeg_n_timefields]
+        self.save_buffer_dims = [save_buffer_length, n_channels + self.n_timefields]
         self.n_new = 0 # n added to save buffer
         self.n_not_proc = 0 # n added since last processing
         self.save_buffer = np.zeros(self.save_buffer_dims).astype(self.raw_dtype)
@@ -144,16 +148,16 @@ class EEG(tcls):
         '''
         try:
             if not config.SIM_DATA:
-                streams = resolve_stream('type', 'EEG')
+                streams = resolve_byprop('type', 'EEG')
                 inlet = StreamInlet(streams[0])
-                read_buffer = np.zeros([config.read_buffer_length, config.n_channels+config.eeg_n_timefields])
+                read_buffer = np.zeros([config.read_buffer_length, config.n_channels+self.n_timefields])
                 rbi = 0
                 while self._on.value and not self.kill_flag.value:
                     dat, tse = inlet.pull_sample()
                     tc = inlet.time_correction()
                     
-                    ts, cs = now(), now2()
-                    read_buffer[rbi, :] = dat + [tse, tc, ts, cs] # latter list must be length of config.eeg_n_timefields, ending in ts,cs
+                    ts = now()
+                    read_buffer[rbi, :] = dat + [tse, tc] + ts
                     rbi += 1
                     if rbi == config.read_buffer_length:
                         self.eeg_queue.put(read_buffer.copy())
@@ -168,7 +172,7 @@ class EEG(tcls):
                 ex_data += np.random.normal(0, 10.0, size=ex_data.shape) # add gaussian noise
                 idx_arr = np.random.randint(len(ex_data)-config.read_buffer_length, size=self.n_channels)
                 while self._on.value and not self.kill_flag.value:
-                    t0 = now()
+                    t0 = now(minimal=True)
                     
                     '''
                     t = np.arange(self.i, self.i+self.read_buffer_length) / self.fs
@@ -187,14 +191,14 @@ class EEG(tcls):
                     ex_data = np.roll(ex_data, -config.read_buffer_length)
                     dat = np.array(dat).astype(self.raw_dtype)
 
-                    ts, cs = now(), now2()
-                    dat = np.concatenate([dat, [[0]*dat.shape[1], [0]*dat.shape[1], [ts]*dat.shape[1], [cs]*dat.shape[1]]])
+                    ts = now()
+                    dat = np.concatenate([dat, [[0]*dat.shape[1], [0]*dat.shape[1], [ts[0]]*dat.shape[1], [ts[1]]*dat.shape[1], [ts[2]]*dat.shape[1] ]])
                     dat = dat.T
 
                     self.eeg_queue.put(dat)
                     self.total_hardware_writes.value += 1
                     
-                    time.sleep(max(0,self.read_buffer_length / self.fs - (now()-t0)))
+                    time.sleep(max(0,self.read_buffer_length / self.fs - (now(minimal=True)-t0)))
         except Exception as e:
             self.error_queue.put(f'EEG streaming: {str(e)}')
 
@@ -230,7 +234,7 @@ class EEG(tcls):
                 #-- process new data (specifically done after saving buffer, so completely raw data are saved)
 
                 # reference
-                dat[:,:-config.eeg_n_timefields] = dat[:,:-config.eeg_n_timefields] - dat[:, config.chan_reference][:, None]
+                dat[:,:-self.n_timefields] = dat[:,:-self.n_timefields] - dat[:, config.chan_reference][:, None]
 
                 # filter
                 if self.new_filter_params_flag.value:
@@ -240,7 +244,7 @@ class EEG(tcls):
                     lfilt.hi = hi
                     lfilt.notch = notch
                     lfilt.refresh_filter()
-                dat[:,:-config.eeg_n_timefields] = lfilt(dat[:,:-config.eeg_n_timefields])
+                dat[:,:-self.n_timefields] = lfilt(dat[:,:-self.n_timefields])
                 
                 # update memory with new data
                 self.memory = np.roll(self.memory,
@@ -264,7 +268,8 @@ class EEG(tcls):
                         warnings.warn(f'Lost some EEG samples: {n_new} were acquired, {self.save_buffer_length} saved') # shouldnt happen
                     self.empty_save_buffer()
         except Exception as e:
-            self.error_queue.put(f'EEG main: {str(e)}')            
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            self.error_queue.put(f'EEG main (line {exc_tb.tb_lineno}): {str(e)}')
 
     def slice_to_flat_idxs(self, sls, shape):
         rngs = []
@@ -287,12 +292,17 @@ class EEG(tcls):
     def empty_save_buffer(self, N=0):
         if self.saver_obj_buffer is None:
             return
-        self.saver_obj_buffer.put(['eeg',
-                                   self.save_buffer[-N:, :-2].copy(), # contains two columns of hardware ts
-                                   self.save_buffer[-N:, -2].copy(),
-                                   self.save_buffer[-N:, -1].copy(),
-                                   [f'{i}' for i in range(self.n_channels)]+['hardware_ts', 'hardware_offset']],
-                                  )
+        
+        save('eeg',
+             data=self.save_buffer[-N:, :-3].copy(), # the two added columns of hardware ts (inlet and offset), followed by 3 general now() fields. we cut off the 3 and use them below, but we keep the 2 former
+             buffer=self.saver_obj_buffer,
+             time_data=[ # note that if n_timefields changes, this needs manual adjustment - it assumes 3 fields come from now(), assertion flag
+                            self.save_buffer[-N:, -3].copy(),
+                            self.save_buffer[-N:, -2].copy(),
+                            self.save_buffer[-N:, -1].copy(),
+                 ],
+             columns=[f'{i}' for i in range(self.n_channels)]+['hardware_ts', 'hardware_offset'],
+           )
         self.n_new = 0
     
     def get_memory(self, with_idx=False):
@@ -320,7 +330,7 @@ class EEG(tcls):
             if self.first_spect_time.value == -1:
                 self.first_spect_time.value = dat[0, -2] # uses wall clock now() taken at eeg's acquisition as the reference time
 
-            dat = dat[:, :-config.eeg_n_timefields] # remove timestamp columns
+            dat = dat[:, :-self.n_timefields] # remove timestamp columns
 
             spect, s_time, s_freq = MTS(dat, fs=self.fs,
                                         **self.spect_params)
