@@ -1,2 +1,10 @@
-
 for lsl: conda install -c conda-forge liblsl  and then  pip install pylsl
+
+To do:
+- test sseps for real
+- test oddball for real
+- push live tci testing to limits
+- make plan for live tci walkup and ensure it works
+- connect openbci cyton via lsl
+- connect grip switch and display it
+- wire ssep stimulus into cyton aux port

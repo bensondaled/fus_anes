@@ -96,3 +96,11 @@ oddball_deviant_ratio = 0.20
 oddball_isi_ms = 500
 oddball_duration_min = 3.0
 oddball_n_standard_start = 15
+
+# Chirp
+chirp_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp.wav'
+chirp_white_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp_white.wav'
+chirp_n_tones = 100 # will have 10 additional chirp at start
+chirp_isi_ms = (1220, 1520)
+chirp_ctl_rate = 0.1
+chirp_n_start = 10

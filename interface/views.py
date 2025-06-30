@@ -216,6 +216,7 @@ class Interface(qtw.QWidget):
         self.b_run_baseline = qtw.QPushButton('Baseline')
         self.b_run_squeeze = qtw.QPushButton('Squeeze')
         self.b_run_oddball = qtw.QPushButton('Oddball')
+        self.b_run_chirp = qtw.QPushButton('Chirp')
         self.b_clear_tci_queue = qtw.QPushButton('Clear TCI')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
@@ -238,18 +239,19 @@ class Interface(qtw.QWidget):
         self.b_toggle_raw = qtw.QPushButton('Toggle main views')
         self.b_toggle_video = qtw.QPushButton('Toggle video/audio/CO2')
 
-        row0_toolbar_items = [1, self.b_sesh, self.l_sesh, 50,
+        row0_toolbar_items = [1, self.b_sesh, self.l_sesh, 20,
                              self.b_reset_xlim, 1,
                              self.b_toggle_raw, 1,
-                             self.b_toggle_video,
-                              50,
+                             self.b_toggle_video, 20,
+                              self.b_marker, self.t_marker, 2,
+                              self.b_lor, 1, self.b_ror, 1,
+                              20,
                               ]
-        row1_toolbar_items = [1,
+        row1_toolbar_items = [5,
                               self.b_run_baseline, 5,
                               self.b_run_squeeze, 5,
                               self.b_run_oddball, 5,
-                              self.b_marker, self.t_marker, 2,
-                              self.b_lor, 1, self.b_ror, 1,
+                              self.b_run_chirp,
                               20,
                               self.b_bolus, self.t_bolus, 1,
                               self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,

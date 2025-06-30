@@ -39,6 +39,7 @@ class Controller():
         self.ui.b_run_baseline.clicked.connect(self.toggle_baseline)
         self.ui.b_run_squeeze.clicked.connect(self.toggle_squeeze)
         self.ui.b_run_oddball.clicked.connect(self.toggle_oddball)
+        self.ui.b_run_chirp.clicked.connect(self.toggle_chirp)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
         self.ui.b_project.clicked.connect(self.project)
@@ -363,6 +364,14 @@ class Controller():
             self.ui.b_run_oddball.setText('Stop oddball')
         else:
             self.ui.b_run_oddball.setText('Oddball')
+    
+    @require_session
+    def toggle_chirp(self, event):
+        self.session.toggle_chirp()
+        if self.session.chirp is not None:
+            self.ui.b_run_chirp.setText('Stop chirp')
+        else:
+            self.ui.b_run_chirp.setText('Chirp')
     
     @require_session
     def update_filters(self):

@@ -10,7 +10,7 @@ import time
 from datetime import datetime as dtm
 
 from fus_anes.hardware import EEG, Pump, Camera, Microphone
-from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball
+from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball, Chirp
 from fus_anes.util import Saver, multitaper_spectrogram, now, save
 from fus_anes.tci import LiveTCI
 import fus_anes.config as config
@@ -36,6 +36,7 @@ class Session():
         self.squeeze = None
         self.baseline_eyes = None
         self.oddball = None
+        self.chirp = None
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
         self.mic = Microphone(self.tech_name, error_queue=self.error_queue)
         self.eeg = EEG(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
@@ -66,6 +67,14 @@ class Session():
         else:
             self.oddball.end()
             self.oddball = None
+
+    def toggle_chirp(self):
+        if self.chirp is None:
+            self.chirp = Chirp(saver_buffer=self.saver.buffer)
+            self.chirp.play()
+        else:
+            self.chirp.end()
+            self.chirp = None
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]
@@ -111,7 +120,7 @@ class Session():
     def end(self):
         self.running = False
         save('tci_end', dict(tcm=json.dumps(self.tci.export())), self.saver.buffer)
-        to_end = [self.eeg, self.saver, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze, self.oddball]
+        to_end = [self.eeg, self.saver, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze, self.oddball, self.chirp]
         for te in to_end:
             print(te)
             if te is None:
