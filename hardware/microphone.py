@@ -178,4 +178,4 @@ class Microphone(mproc):
     def end(self):
         self.kill_flag.value = 1
         while self._on.value:
-            time.sleep(0.010)
+            time.sleep(0.250)

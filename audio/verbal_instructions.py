@@ -38,7 +38,7 @@ class SqueezeInstructions(mproc):
         
         self.saver_buffer = saver_buffer
         
-        self.playing = mp.Value('b', 0)
+        self.playing = mp.Value('b', 1)
         self.kill_flag = mp.Value('b', 0)
 
     def get_clip(self, i=None):
@@ -54,7 +54,6 @@ class SqueezeInstructions(mproc):
         self.start()
 
     def run(self):
-        self.playing.value = 1
         idx = 1
         while not self.kill_flag.value:
             if self.with_nums:
@@ -78,8 +77,8 @@ class SqueezeInstructions(mproc):
 
     def end(self):
         self.kill_flag.value = True
-        #while self.playing.value:
-        #    time.sleep(0.025)
+        while self.playing.value:
+            time.sleep(0.100)
 
 class BaselineEyes(mproc):
     def __init__(self, names=['closed.mp3', 'open.mp3'], n_reps=2, dur=60.0,
@@ -89,7 +88,7 @@ class BaselineEyes(mproc):
         self.n_reps = n_reps
         self.dur = dur
         self.saver_buffer = saver_buffer
-        self.playing = mp.Value('b', 0)
+        self.playing = mp.Value('b', 1)
         self.kill_flag = mp.Value('b', 0)
     
     def play(self):
@@ -97,7 +96,6 @@ class BaselineEyes(mproc):
         self.start()
 
     def run(self):
-        self.playing.value = 1
         paths = np.repeat(self.clip_paths, self.n_reps)
         np.random.shuffle(paths)
 
@@ -113,8 +111,8 @@ class BaselineEyes(mproc):
 
     def end(self):
         self.kill_flag.value = 1
-        #while self.playing.value:
-        #    time.sleep(0.025)
+        while self.playing.value:
+            time.sleep(0.100)
 
 if __name__ == '__main__':
     vi = SqueezeInstructions()

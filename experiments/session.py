@@ -43,38 +43,35 @@ class Session():
         trun = now(minimal=True)
         self.running = trun
         self.eeg.start_processing()
-    
+     
     def toggle_baseline(self):
-        if self.baseline_eyes is None:
-            self.baseline_eyes = BaselineEyes(saver_buffer=self.saver.buffer)
-            self.baseline_eyes.play()
-        else:
-            self.baseline_eyes.end()
-            self.baseline_eyes = None
-
+        self._run_auditory_process(cls=BaselineEyes, obj_name='baseline_eyes')
     def toggle_squeeze(self):
-        if self.squeeze is None:
-            self.squeeze = SqueezeInstructions(saver_buffer=self.saver.buffer)
-            self.squeeze.play()
-        else:
-            self.squeeze.end()
-            self.squeeze = None
-    
+        self._run_auditory_process(cls=SqueezeInstructions, obj_name='squeeze')
     def toggle_oddball(self):
-        if self.oddball is None:
-            self.oddball = Oddball(saver_buffer=self.saver.buffer)
-            self.oddball.play()
-        else:
-            self.oddball.end()
-            self.oddball = None
-
+        self._run_auditory_process(cls=Oddball, obj_name='oddball')
     def toggle_chirp(self):
-        if self.chirp is None:
-            self.chirp = Chirp(saver_buffer=self.saver.buffer)
-            self.chirp.play()
+        self._run_auditory_process(cls=Chirp, obj_name='chirp')
+
+    def _run_auditory_process(self, cls, obj_name):
+        if getattr(self, obj_name) is None:
+            obj = cls(saver_buffer=self.saver.buffer)
+            setattr(self, obj_name, obj)
+            obj.play()
+            threading.Thread(target=self._nullify_when_done_playing, args=(obj_name,), daemon=True).start()
         else:
-            self.chirp.end()
-            self.chirp = None
+            obj = getattr(self, obj_name)
+            obj.end()
+            setattr(self, obj_name, None)
+
+    def _nullify_when_done_playing(self, obj_name):
+        obj = getattr(self, obj_name)
+        if obj is None:
+            return
+        while obj.playing.value:
+            time.sleep(2.0)
+        obj.end()
+        setattr(self, obj_name, None)
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]

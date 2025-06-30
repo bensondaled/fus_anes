@@ -31,7 +31,7 @@ class Oddball(mproc):
 
         self.saver_buffer = saver_buffer
         
-        self.is_playing = mp.Value('b', 0)
+        self.playing = mp.Value('b', 1)
         self.kill_flag = mp.Value('b', 0)
 
     def play(self):
@@ -39,7 +39,7 @@ class Oddball(mproc):
         self.start()
 
     def run(self):
-        duration_min = config.oddball_duration_min
+        n_tones = config.oddball_n_tones
         isi_ms = config.oddball_isi_ms
         oddball_ratio = config.oddball_deviant_ratio
 
@@ -47,12 +47,9 @@ class Oddball(mproc):
         deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
 
         tone_duration_ms = int(len(standard_data) / fs * 1000)
-        silence_duration_ms = isi_ms - tone_duration_ms
-        silence_samples = int(silence_duration_ms / 1000 * fs)
 
-        total_stimuli = int((duration_min * 60 * 1000) / isi_ms)
-        n_deviants = int(total_stimuli * oddball_ratio)
-        n_standards = total_stimuli - n_deviants
+        n_deviants = int(n_tones * oddball_ratio)
+        n_standards = n_tones - n_deviants
 
         sequence = np.array(['s'] * n_standards + ['d'] * n_deviants)
         n_allowed_consecutive = 0
@@ -67,13 +64,7 @@ class Oddball(mproc):
         print(f'Allowed {n_allowed_consecutive} consecutive oddballs')
         sequence = np.append(np.array(['s'] * config.oddball_n_standard_start),  sequence)
 
-        wait_ms = isi_ms - tone_duration_ms
-        wait_sec = wait_ms / 1000.0
-
-
         # --- play
-        self.is_playing.value = 1
-
         for i, stim_type in enumerate(sequence):
             if self.kill_flag.value:
                 break
@@ -88,11 +79,15 @@ class Oddball(mproc):
             dummy = now(minimal=True)
             playtime = play_tone_precisely(data, fs)
             save('oddball', dict(event=stim_type, onset_ts=playtime, dummy=dummy), self.saver_buffer)
-            time.sleep(wait_sec)
+        
+            wait_ms = isi_ms - 1000*(now(minimal=True)-playtime)
+            print(wait_ms, playtime, now(minimal=True))
+            if wait_ms > 0:
+                time.sleep(wait_ms / 1000.0)
 
-        self.is_playing.value = 0
+        self.playing.value = 0
 
     def end(self):
         self.kill_flag.value = True
-        #while self.is_playing.value:
-        #    time.sleep(0.025)
+        while self.playing.value:
+            time.sleep(0.100)

@@ -94,7 +94,7 @@ goto_target_step_size = 15.0
 oddball_audio_path = '/Users/bdd/code/fus_anes/media/oddball_audio/'
 oddball_deviant_ratio = 0.20
 oddball_isi_ms = 500
-oddball_duration_min = 3.0
+oddball_n_tones = 300
 oddball_n_standard_start = 15
 
 # Chirp

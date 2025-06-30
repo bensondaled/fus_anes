@@ -113,10 +113,6 @@ class Controller():
     @require_session
     def toggle_baseline(self, *args):
         self.session.toggle_baseline()
-        if self.session.baseline_eyes is not None:
-            self.ui.b_run_baseline.setText('Stop baseline')
-        else:
-            self.ui.b_run_baseline.setText('Baseline')
     
     @require_session
     def select_spect_time(self, obj, selection_idx=0, figname=''):
@@ -417,6 +413,18 @@ class Controller():
                 self.ui.b_sesh.setText('End session')
                 self.ui.splash(False)
                 self.ui.setEnabled(True)
+            
+            words = ['baseline', 'squeeze', 'oddball', 'chirp']
+            objs = [self.session.baseline_eyes, self.session.squeeze, self.session.oddball, self.session.chirp]
+            buts = [self.ui.b_run_baseline, self.ui.b_run_squeeze, self.ui.b_run_oddball, self.ui.b_run_chirp]
+            for word, obj, but in zip(words, objs, buts):
+                if obj is not None:
+                    new_txt = f'Stop {word}'
+                else:
+                    new_txt = word.capitalize()
+
+                if but.text() != new_txt:
+                    but.setText(new_txt)
 
         if self.ui.b_sesh.text() == '(Session ending)' and self.session.completed:
             self.session = None

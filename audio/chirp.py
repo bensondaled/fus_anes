@@ -28,7 +28,7 @@ class Chirp(mproc):
 
         self.saver_buffer = saver_buffer
         
-        self.is_playing = mp.Value('b', 0)
+        self.playing = mp.Value('b', 1)
         self.kill_flag = mp.Value('b', 0)
 
     def play(self):
@@ -45,17 +45,13 @@ class Chirp(mproc):
         isi_ms = config.chirp_isi_ms
         
         isis = np.random.choice(np.arange(isi_ms[0], isi_ms[1]+1, 100), size=n_reps)
-        wait_ms = isis - tone_duration_ms
-        wait_sec = wait_ms / 1000.0
 
         n_ctrl = int(config.chirp_ctl_rate * config.chirp_n_tones)
         sequence = np.array(['c']*(config.chirp_n_tones-n_ctrl) + ['w']*n_ctrl)
         np.random.shuffle(sequence)
         sequence = np.append(np.array(['c']*config.chirp_n_start), sequence)
 
-        self.is_playing.value = 1
-
-        for seq,wait in zip(sequence, wait_sec):
+        for seq,isi in zip(sequence, isis):
             if self.kill_flag.value:
                 break
 
@@ -68,11 +64,14 @@ class Chirp(mproc):
             #sd.wait()
             playtime = play_tone_precisely(data, fs)
             save('chirp', dict(event=seq, onset_ts=playtime), self.saver_buffer)
-            time.sleep(wait)
+            
+            wait_ms = isi - 1000*(now(minimal=True)-playtime)
+            if wait_ms > 0:
+                time.sleep(wait_ms / 1000.0)
 
-        self.is_playing.value = 0
+        self.playing.value = 0
 
     def end(self):
         self.kill_flag.value = True
-        #while self.is_playing.value:
-        #    time.sleep(0.025)
+        while self.playing.value:
+            time.sleep(0.100)
