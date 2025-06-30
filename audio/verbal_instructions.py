@@ -38,7 +38,7 @@ class SqueezeInstructions(mproc):
         
         self.saver_buffer = saver_buffer
         
-        self.is_playing = mp.Value('b', 0)
+        self.playing = mp.Value('b', 0)
         self.kill_flag = mp.Value('b', 0)
 
     def get_clip(self, i=None):
@@ -54,7 +54,7 @@ class SqueezeInstructions(mproc):
         self.start()
 
     def run(self):
-        self.is_playing.value = 1
+        self.playing.value = 1
         idx = 1
         while not self.kill_flag.value:
             if self.with_nums:
@@ -74,11 +74,11 @@ class SqueezeInstructions(mproc):
             time.sleep(isi)
 
             idx += 1
-        self.is_playing.value = 0
+        self.playing.value = 0
 
     def end(self):
         self.kill_flag.value = True
-        #while self.is_playing.value:
+        #while self.playing.value:
         #    time.sleep(0.025)
 
 class BaselineEyes(mproc):

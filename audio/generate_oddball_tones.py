@@ -28,7 +28,7 @@ def save_tone(filename, freq, duration_ms=150, sample_rate=44100):
 
 if __name__ == "__main__":
     sample_rate = 44100
-    save_tone('standard_tone.wav', freq=1000, duration_ms=150, sample_rate=sample_rate)
-    save_tone('deviant_tone.wav', freq=1200, duration_ms=150, sample_rate=sample_rate)
+    save_tone('standard_tone.wav', freq=1000, duration_ms=100, sample_rate=sample_rate)
+    save_tone('deviant_tone.wav', freq=1200, duration_ms=100, sample_rate=sample_rate)
 
 

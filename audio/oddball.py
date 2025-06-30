@@ -5,7 +5,8 @@ import numpy as np
 import multiprocessing as mp
 
 import fus_anes.config as config
-from fus_anes.util import save
+from fus_anes.util import save, now
+from .audio_util import play_tone_precisely
 
 import sounddevice as sd
 import soundfile as sf
@@ -16,6 +17,7 @@ if config.THREADS_ONLY:
     mproc = threading.Thread
 else:
     mproc = mp.Process
+
 
 class Oddball(mproc):
     def __init__(self, saver_buffer=None,
@@ -33,7 +35,7 @@ class Oddball(mproc):
         self.kill_flag = mp.Value('b', 0)
 
     def play(self):
-        save('oddball', dict(event='P'), self.saver_buffer)
+        save('oddball', dict(event='P', onset_ts=0.0, dummy=0.0), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -67,6 +69,9 @@ class Oddball(mproc):
 
         wait_ms = isi_ms - tone_duration_ms
         wait_sec = wait_ms / 1000.0
+
+
+        # --- play
         self.is_playing.value = 1
 
         for i, stim_type in enumerate(sequence):
@@ -78,9 +83,11 @@ class Oddball(mproc):
             elif stim_type == 'd':
                 data = deviant_data
 
-            save('oddball', dict(event=stim_type), self.saver_buffer)
-            sd.play(data, fs)
-            sd.wait()
+            #sd.play(data, fs)
+            #sd.wait()
+            dummy = now(minimal=True)
+            playtime = play_tone_precisely(data, fs)
+            save('oddball', dict(event=stim_type, onset_ts=playtime, dummy=dummy), self.saver_buffer)
             time.sleep(wait_sec)
 
         self.is_playing.value = 0

@@ -1,6 +1,7 @@
 for lsl: conda install -c conda-forge liblsl  and then  pip install pylsl
 
 To do:
+- implement the auto end of all the auditory stuff
 - test sseps for real
 - test oddball for real
 - push live tci testing to limits

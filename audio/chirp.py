@@ -6,6 +6,7 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save
+from .audio_util import play_tone_precisely
 
 import sounddevice as sd
 import soundfile as sf
@@ -31,7 +32,7 @@ class Chirp(mproc):
         self.kill_flag = mp.Value('b', 0)
 
     def play(self):
-        save('chirp', dict(event='P'), self.saver_buffer)
+        save('chirp', dict(event='P', onset_ts=0.0), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -63,9 +64,10 @@ class Chirp(mproc):
             elif seq == 'w':
                 data = white_data
 
-            save('chirp', dict(event=seq), self.saver_buffer)
-            sd.play(data, fs)
-            sd.wait()
+            #sd.play(data, fs)
+            #sd.wait()
+            playtime = play_tone_precisely(data, fs)
+            save('chirp', dict(event=seq, onset_ts=playtime), self.saver_buffer)
             time.sleep(wait)
 
         self.is_playing.value = 0

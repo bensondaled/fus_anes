@@ -15,10 +15,10 @@ import fus_anes.config as config
 
 def save(label, data, buffer, time_data=None, columns=None):
     if time_data is None:
-        timestamp, perfstamp, lslstamp = now()
+        lslstamp, timestamp, perfstamp = now()
     else:
-        timestamp, perfstamp, lslstamp = time_data
-    buffer.put([label, data, timestamp, perfstamp, lslstamp, columns])
+        lslstamp, timestamp, perfstamp = time_data
+    buffer.put([label, data, lslstamp, timestamp, perfstamp, columns])
 
 def parse_config_dict(d):
     exclude = ['__name__',
@@ -78,7 +78,7 @@ class Saver(mp.Process):
                 if record is None: # sentinel to end
                     break
                 
-                label, data, ts, ps, ls, columns = record
+                label, data, ls, ts, ps, columns = record
 
                 if not isinstance(data, pd.DataFrame):
                     idx = np.atleast_1d(np.squeeze([ls]))
