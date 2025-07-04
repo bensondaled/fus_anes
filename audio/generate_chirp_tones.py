@@ -4,6 +4,12 @@ https://www.frontiersin.org/journals/human-neuroscience/articles/10.3389/fnhum.2
 import numpy as np
 import os
 from scipy.io import wavfile
+from scipy.signal import butter, filtfilt
+
+def bandpass_filter(data, lowcut, highcut, fs, order=4):
+    nyq = 0.5 * fs
+    b, a = butter(order, [lowcut / nyq, highcut / nyq], btype='band')
+    return filtfilt(b, a, data)
     
 out_path = '/Users/bdd/code/fus_anes/media/chirp_audio'
 
@@ -35,14 +41,14 @@ def generate_chirp(kind):
 
     # --- white noise ctrl
     white_noise = np.random.normal(0, 1, len(t))
-    filtered_noise = white_noise
-    filtered_noise *= envelope
-    filtered_noise /= np.max(np.abs(filtered_noise))  # Normalize
+    white_noise = bandpass_filter(white_noise, 800, 1200, fs)  # match chirp band
+    white_noise *= envelope
+    white_noise /= np.max(np.abs(white_noise))
 
     if kind == 'chirp':
         return chirp_modulated
     elif kind == 'noise':
-        return filtered_noise
+        return white_noise
 
 def save_chirp(filename, tone):
     # Normalize to 16-bit PCM
