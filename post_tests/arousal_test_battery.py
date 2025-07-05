@@ -9,8 +9,12 @@ import json
 import numpy as np
 from datetime import datetime
 
+import fus_anes.config as config
 
-data_file = '/Users/bdd/Desktop/results.txt'
+data_file = os.path.join(config.data_path, f'{config.subject_id}_post_tests.txt')
+red_path = os.path.join(config.post_test_graphics_path, 'red.jpeg')
+symbol_path = os.path.join(config.post_test_graphics_path, 'symbols')
+num_path = os.path.join(config.post_test_graphics_path, 'nums')
 
 win = visual.Window(fullscr=False, color='black', units='norm')
 text = visual.TextStim(win, text='', color='white', height=0.07, wrapWidth=1.5)
@@ -36,7 +40,7 @@ def show_msg(message, wait_keys=['space']):
 
 
 # === Psychomotor Vigilance Task (Visual) ===
-red_box = visual.ImageStim(win, image='/Users/bdd/Desktop/red.jpeg',
+red_box = visual.ImageStim(win, image=red_path,
 								size=(0.4,0.4),
 								pos=[0, 0],
                                 units='norm')
@@ -50,12 +54,20 @@ for trial in range(total_trials):
     red_box.draw()
     win.flip()
 
-    jitter = random.uniform(min_interval, max_interval)
-    core.wait(jitter - 1)  # Subtract 1s to leave time for feedback
+    start_time = kb.clock.getTime()
 
     kb.clearEvents()
     kb.clock.reset()
+    start_delay = random.uniform(min_interval, max_interval)
+    while kb.clock.getTime() - start_time < start_delay:
+        keys = kb.getKeys(['space'], waitRelease=True)
+        if keys:
+            response = keys[0]
+            rt = response.rt
+            log('pvt', dict(delay=start_delay, rt=rt, note='early', displayed_rt_ms=''))
 
+    kb.clearEvents()
+    kb.clock.reset()
     # Update yellow counter every frame until response
     while True:
         now = kb.clock.getTime()
@@ -72,7 +84,7 @@ for trial in range(total_trials):
             rt = response.rt
             break
 
-    log('pvt', dict(delay=jitter, rt=rt, displayed_rt_ms=ms))
+    log('pvt', dict(delay=start_delay, rt=rt, displayed_rt_ms=ms, note=''))
     core.wait(1.0)
     win.flip()
     core.wait(1.0)
@@ -82,8 +94,6 @@ for trial in range(total_trials):
 
 # === Digit Symbol Substitution Task (DSST) ===
 # Visual key map setup
-symbol_path = '/Users/bdd/Desktop/symbols'
-num_path = '/Users/bdd/Desktop/nums'
 symbol_names = sorted(os.listdir(symbol_path))
 np.random.shuffle(symbol_names)
 num_names = sorted(os.listdir(num_path))
