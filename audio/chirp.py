@@ -5,7 +5,7 @@ import numpy as np
 import multiprocessing as mp
 
 import fus_anes.config as config
-from fus_anes.util import save
+from fus_anes.util import save, now
 from .audio_util import play_tone_precisely
 
 import sounddevice as sd
