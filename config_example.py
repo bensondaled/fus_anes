@@ -33,7 +33,7 @@ read_buffer_length = 25 # samples
 eeg_key = BCA_SL_32
 n_channels = len(eeg_key)
 eeg_init_chan_selects = [passive_eeg_frontal, passive_eeg_posterior]
-max_freq = 80 # of physiologic interest, Hz
+max_freq = 40 # of physiologic interest, Hz
 spect_update_interval = 5000 # samples (use multiple of fs and <eeg_memory_length)
 spect_memory_length = 60*60*3 # seconds
 spect_freq_downsample = 5
@@ -50,9 +50,8 @@ n_spect_time_selections = 3
 n_spect_freq_selections = 2
 spect_freq_defaults = [(0.5, 4), (9, 15)]
 cmap = 'rainbow'
-eeg_baseline_gain = 2
-eeg_gain_zoom_factor = 500 / eeg_baseline_gain # high: finer
-ratio_smooth_win_size = 5
+eeg_baseline_gain = 1
+eeg_gain_zoom_factor = 10000 / eeg_baseline_gain # high: finer
 spect_log = True
 
 # Misc display
