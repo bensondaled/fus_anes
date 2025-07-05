@@ -79,8 +79,9 @@ class Oddball(mproc):
             dummy = now(minimal=True)
             playtime = play_tone_precisely(data, fs)
             save('oddball', dict(event=stim_type, onset_ts=playtime, dummy=dummy), self.saver_buffer)
-        
-            wait_ms = isi_ms - 1000*(now(minimal=True)-playtime)
+            
+            _isi = np.random.randint(*isi_ms)
+            wait_ms = _isi - 1000*(now(minimal=True)-playtime)
             print(wait_ms, playtime, now(minimal=True))
             if wait_ms > 0:
                 time.sleep(wait_ms / 1000.0)

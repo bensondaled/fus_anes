@@ -2,25 +2,29 @@ from fus_anes.constants import *
 
 # Flags
 THREADS_ONLY = False
-TESTING = False
-SIM_DATA = False
+TESTING = True
+SIM_DATA = True
 
 # Subject
-subject_id = 'test_subject'
+subject_id = 'p005'
 age = 40
 weight = 70.0
 height = 180.0
-sex = 'f'
-name = 'sarah'
+sex = 'm'
+name = 'andy'
 
 # Paths
-data_path = 'C:/data_burst'
-logging_file = 'logs/burst_log.log'
-loading_img_path = 'media/propofol.png'
+data_path = '/Users/bdd/data/fus_anes/'
+logging_file = '/Users/bdd/data/fus_anes/log.log'
+loading_img_path = '/Users/bdd/code/fus_anes/media/propofol.png'
+post_test_graphics_path = '/Users/bdd/code/fus_anes/post_tests/graphics/'
+baseline_audio_path = '/Users/bdd/code/fus_anes/media/baseline_audio'
+oddball_audio_path = '/Users/bdd/code/fus_anes/media/oddball_audio/'
+chirp_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp.wav'
+chirp_white_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp_white.wav'
 
 # Verbal instructions
-baseline_audio_path = 'C:/code/fus_anes/media/baseline_audio'
-verbal_instructions_path = data_path
+verbal_instructions_path = '/Users/bdd/data/fus_anes/'
 verbal_instruction_interval = 0.5, (3.0, 1.5) # secs: min, (mean, sd)
 verbal_instruction_command = 'squeeze'
 verbal_instructions_n_prepare = 120
@@ -59,23 +63,23 @@ timeline_duration = 20*60 # secs, default time range to show
 timeline_advance = 2.5*60 # secs, how much to jump in advance when you hit the end of timeline
 
 # Camera
-cam_frame_size = [480, 640, 3]
-cam_resize = 1
+cam_frame_size = [1080, 1920, 3]
+cam_resize = 1/5
 cam_file_duration = 10*60 # secs
-fourcc = -1#'XVID'
-mov_ext = 'mp4' # xvid=avi, -1=mp4
+fourcc = 'XVID'
+mov_ext = 'avi' # xvid=avi, -1=mp4
 
 # Sound
 audio_in_ch_out_ch = [2, 3]
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 audio_hdf_resize = audio_save_chunk * 10
-audio_device_idx = 1 # use audio_probe script to identify mics
+audio_device_idx = 0 # use audio_probe script to identify mics
 n_audio_display = 3.0 # secs
 
 # TCI
 drug = 'propofol'
-pump_port = 'COM3' # Device manager: "Prolific USB-to-Serial..."
+pump_port = 'COM8' # Device manager: "Prolific USB-to-Serial..."
 tci_use_prior_session = True
 tci_sim_duration = 8*60 # secs
 tci_minval = 10
@@ -90,15 +94,12 @@ drug_mg_ml = 10.0 # 10mg/ml for propofol
 goto_target_step_size = 15.0
 
 # Oddball
-oddball_audio_path = 'C:/code/fus_anes/media/oddball_audio/'
 oddball_deviant_ratio = 0.20
-oddball_isi_ms = 500
+oddball_isi_ms = [480, 620]
 oddball_n_tones = 300
 oddball_n_standard_start = 15
 
 # Chirp
-chirp_audio_path = 'C:/code/fus_anes/media/chirp_audio/chirp.wav'
-chirp_white_audio_path = 'C:/code/fus_anes/media/chirp_audio/chirp_white.wav'
 chirp_n_tones = 100 # will have 10 additional chirp at start
 chirp_isi_ms = (1220, 1520)
 chirp_ctl_rate = 0.1
