@@ -65,7 +65,7 @@ class SqueezeInstructions(mproc):
                 clip = self.get_clip(None)
 
             data, samplerate = sf.read(clip)
-            isi = self.interval[0] + np.random.normal(*self.interval[1])
+            isi = max(self.interval[0] + np.random.normal(*self.interval[1]), 0.010)
             save('squeeze', dict(event=os.path.split(clip)[-1], isi=isi), self.saver_buffer)
 
             sd.play(data, samplerate)
