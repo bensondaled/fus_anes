@@ -846,12 +846,12 @@ class Interface(qtw.QWidget):
                     modshow = 60*10, 60
                 '''
                 modshow = 60, 30 # show text, show line (secs)
-                tlxticks = np.arange(0, self.timeline_xlim[1]*10, modshow[1])
+                tlxticks = np.arange(0, self.timeline_xlim[1]*100, modshow[1])
                 labs = [f'{x/60:0.0f}' if x%modshow[0]==0 else '' for x in tlxticks]
                 xaxis.setTicks([[(t,l) for t,l in zip(tlxticks, labs)], [], []])
             elif p =='timeline_nav':
                 modshow = 120, 30 # show text, show line (secs)
-                tlxticks = np.arange(0, self.timeline_xlim[1]*10, modshow[1])
+                tlxticks = np.arange(0, self.timeline_xlim[1]*100, modshow[1])
                 labs = [f'{x/60:0.0f}' if x%modshow[0]==0 else '' for x in tlxticks]
                 xaxis.setTicks([[(t,l) for t,l in zip(tlxticks, labs)], [], []])
             else:
