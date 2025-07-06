@@ -8,13 +8,15 @@ MONTAGE = [
                 'p3', #6/7
                 'pz', #7/8
                 'p4', #8/9
-                't5', #9/10 actually p7
+                'p7', #9/10
                 'oz', #10/11
-                't6', #11/12 actually p8
-                'fpz', #12/13 (ref)
-                'ecg', #13/14
-                'ssep', #14/15
-                'gripswitch', #15/16
+                'p8', #11/12
+                'm1', #12/13
+                'm2', #13/14
+                'ecg', #14/15
+                'ssep', #15/16
+                'fcz', #16/17 (ref)
+                'gripswitch', #17/18 (aux)
             ]
 
 # 0-index
