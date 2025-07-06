@@ -7,6 +7,7 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save
+from .audio_util import play_tone_precisely
 
 import sounddevice as sd
 import soundfile as sf

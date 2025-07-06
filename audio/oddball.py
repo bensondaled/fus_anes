@@ -71,6 +71,7 @@ class Oddball(mproc):
                 n_allowed_consecutive += 1
         print(f'Allowed {n_allowed_consecutive} consecutive oddballs')
         sequence = np.append(np.array(['s'] * config.oddball_n_standard_start),  sequence)
+        print(len(sequence))
 
         # --- play
         for i, stim_type in enumerate(sequence):

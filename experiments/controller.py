@@ -40,6 +40,7 @@ class Controller():
         self.ui.b_run_squeeze.clicked.connect(self.toggle_squeeze)
         self.ui.b_run_oddball.clicked.connect(self.toggle_oddball)
         self.ui.b_run_chirp.clicked.connect(self.toggle_chirp)
+        self.ui.b_run_ssep.clicked.connect(self.run_ssep)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
         self.ui.b_project.clicked.connect(self.project)
@@ -226,7 +227,7 @@ class Controller():
         #infusions = [t-self.session.running for t, d in self.session.infusions]
         #self.ui.update_meds(boluses=boluses, infusions=infusions)
         
-        markers = [t-self.session.running for t, txt in self.session.markers]
+        markers = [(t-self.session.running, txt) for t, txt in self.session.markers]
         self.ui.update_markers(markers)
     
     def toggle_raw(self):
@@ -348,26 +349,21 @@ class Controller():
     @require_session
     def toggle_squeeze(self, event):
         self.session.toggle_squeeze()
-        if self.session.squeeze is not None:
-            self.ui.b_run_squeeze.setText('Stop squeeze')
-        else:
-            self.ui.b_run_squeeze.setText('Squeeze')
     
     @require_session
     def toggle_oddball(self, event):
         self.session.toggle_oddball()
-        if self.session.oddball is not None:
-            self.ui.b_run_oddball.setText('Stop oddball')
-        else:
-            self.ui.b_run_oddball.setText('Oddball')
     
     @require_session
     def toggle_chirp(self, event):
         self.session.toggle_chirp()
-        if self.session.chirp is not None:
-            self.ui.b_run_chirp.setText('Stop chirp')
+    
+    @require_session
+    def run_ssep(self, event):
+        if not self.ui.b_run_ssep.running:
+            self.session.add_marker([now(minimal=True), 'ssep stop'])
         else:
-            self.ui.b_run_chirp.setText('Chirp')
+            self.session.add_marker([now(minimal=True), 'ssep start'])
     
     @require_session
     def update_filters(self):
@@ -418,13 +414,8 @@ class Controller():
             objs = [self.session.baseline_eyes, self.session.squeeze, self.session.oddball, self.session.chirp]
             buts = [self.ui.b_run_baseline, self.ui.b_run_squeeze, self.ui.b_run_oddball, self.ui.b_run_chirp]
             for word, obj, but in zip(words, objs, buts):
-                if obj is not None:
-                    new_txt = f'Stop {word}'
-                else:
-                    new_txt = word.capitalize()
-
-                if but.text() != new_txt:
-                    but.setText(new_txt)
+                if obj is None and but.running:
+                    but.toggle()
 
         if self.ui.b_sesh.text() == '(Session ending)' and self.session.completed:
             self.session = None

@@ -1,6 +1,7 @@
 from PyQt5 import QtWidgets as qtw
-from PyQt5.QtCore import pyqtSignal, Qt, QSize, pyqtSlot, QSize
-from PyQt5.QtGui import QPalette, QColor, QTransform, QFont, QImage, QPixmap
+from PyQt5.QtCore import pyqtSignal, Qt, QSize, pyqtSlot, QSize, QTimer, QElapsedTimer
+from PyQt5.QtGui import QPalette, QColor, QTransform, QFont, QImage, QPixmap, QCursor
+from PyQt5.QtWidgets import QToolTip, QApplication, QPushButton, QWidget, QVBoxLayout
 from PyQt5 import QtGui
 import pyqtgraph as pg
 import numpy as np
@@ -17,6 +18,47 @@ chan_cols = ['#2b6bac', '#09c197', '#684ce7', '#d77915', '#a00b0b']
 LR_margin = 3
 YAxW = 30
 cmap = pg.colormap.getFromMatplotlib(config.cmap)
+
+class HoverInfiniteLine(pg.InfiniteLine):
+    def __init__(self, pos=0, angle=90, **kwargs):
+        super().__init__(pos=pos, angle=angle, **kwargs)
+        self.setAcceptHoverEvents(True)
+        self.tooltip_text = "No note"
+
+    def hoverEnterEvent(self, event):
+        QToolTip.showText(QCursor.pos(), self.tooltip_text)
+        event.accept()
+
+    def hoverLeaveEvent(self, event):
+        QToolTip.hideText()
+        event.accept()
+
+class StopwatchButton(QPushButton):
+    def __init__(self, main_text='Something', parent=None):
+        super().__init__(main_text, parent)
+        self.main_text = main_text
+        self.timer = QTimer(self)
+        self.elapsed = QElapsedTimer()
+        self.timer.setInterval(1000)
+        self.timer.timeout.connect(self.update_time)
+        self.clicked.connect(self.toggle)
+        self.running = False
+
+    def toggle(self):
+        if not self.running:
+            self.elapsed.start()
+            self.timer.start()
+            self.running = True
+            self.setText(f"{self.main_text}: 0s")
+        else:
+            self.timer.stop()
+            self.running = False
+            self.setText(self.main_text)
+
+    def update_time(self):
+        seconds = self.elapsed.elapsed() / 1000  # ms to seconds
+        self.setText(f"{self.main_text}: {seconds:0.0f}s")
+
 
 class Interface(qtw.QWidget):
     closing = pyqtSignal()
@@ -213,10 +255,11 @@ class Interface(qtw.QWidget):
 
         self.b_sesh = qtw.QPushButton('New session')
         self.l_sesh = qtw.QLabel('(no session)')
-        self.b_run_baseline = qtw.QPushButton('Baseline')
-        self.b_run_squeeze = qtw.QPushButton('Squeeze')
-        self.b_run_oddball = qtw.QPushButton('Oddball')
-        self.b_run_chirp = qtw.QPushButton('Chirp')
+        self.b_run_baseline = StopwatchButton('Baseline')
+        self.b_run_squeeze = StopwatchButton('Squeeze')
+        self.b_run_oddball = StopwatchButton('Oddball')
+        self.b_run_chirp = StopwatchButton('Chirp')
+        self.b_run_ssep = StopwatchButton('SSEP')
         self.b_clear_tci_queue = qtw.QPushButton('Clear TCI')
         self.b_bolus = qtw.QPushButton('Bolus (mg)')
         self.t_bolus = qtw.QLineEdit('0')
@@ -251,13 +294,14 @@ class Interface(qtw.QWidget):
                               self.b_run_baseline, 5,
                               self.b_run_squeeze, 5,
                               self.b_run_oddball, 5,
-                              self.b_run_chirp,
+                              self.b_run_chirp, 5,
+                              self.b_run_ssep,
                               20,
                               self.b_bolus, self.t_bolus, 1,
                               self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,
                               self.b_simulate, 15,
                               self.b_project, 15,
-                              self.b_set_tci_target, self.t_set_tci_target, 5,
+                              self.b_set_tci_target, 2, self.t_set_tci_target, 5,
                               self.b_clear_tci_queue, 5,
                               15,
                               ]
@@ -718,11 +762,12 @@ class Interface(qtw.QWidget):
     def update_markers(self, markers=[]):
         pobj = self.plot_objs[f'timeline']
 
-        for t in markers:
+        for t,txt in markers:
             if t in self.markers_drawn:
                 continue
-            v_bar = pg.InfiniteLine(pos=t, movable=False, angle=90,
+            v_bar = HoverInfiniteLine(pos=t, movable=False, angle=90,
                                     pen=dict(color='pink', width=2))
+            v_bar.tooltip_text = txt
             pobj.addItem(v_bar)
             self.markers_drawn.append(t)
 

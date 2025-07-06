@@ -59,10 +59,16 @@ class Session():
             setattr(self, obj_name, obj)
             obj.play()
             threading.Thread(target=self._nullify_when_done_playing, args=(obj_name,), daemon=True).start()
+
+            t = now(minimal=True)
+            self.add_marker([t, f'{obj_name} start'])
         else:
             obj = getattr(self, obj_name)
             obj.end()
             setattr(self, obj_name, None)
+            
+            t = now(minimal=True)
+            self.add_marker([t, f'{obj_name} ended'])
 
     def _nullify_when_done_playing(self, obj_name):
         obj = getattr(self, obj_name)
@@ -72,6 +78,8 @@ class Session():
             time.sleep(2.0)
         obj.end()
         setattr(self, obj_name, None)
+        t = now(minimal=True)
+        self.add_marker([t, f'{obj_name} complete'])
 
     def get_prior_tcm(self):
         candidates = sorted([os.path.join(config.data_path, f) for f in os.listdir(config.data_path) if f.endswith(f'_subject-{config.subject_id}.h5') and f!=self.data_filename])[::-1]
