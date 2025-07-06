@@ -70,8 +70,8 @@ class SqueezeInstructions(mproc):
                 samplerate = 44100
 
             playtime = play_tone_precisely(data, samplerate)
-            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=isi), self.saver_buffer)
-            _isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
+            isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
+            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=isi_ms), self.saver_buffer)
             if isi_ms > 0:
                 time.sleep(isi_ms / 1000.0)
 
