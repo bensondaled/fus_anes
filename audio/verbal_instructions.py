@@ -109,7 +109,7 @@ class BaselineEyes(mproc):
             save('bl_eyes', dict(event=os.path.split(path)[-1]), self.saver_buffer)
             sd.play(data, samplerate)
             sd.wait()
-            for _ in range(self.dur):
+            for _ in range(int(self.dur)):
                 time.sleep(1)
                 if self.kill_flag.value:
                     break

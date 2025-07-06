@@ -253,7 +253,7 @@ class Interface(qtw.QWidget):
         tbar_row1_layout.setSpacing(0)
         tbar_row1_layout.setContentsMargins(0,0,0,3)
 
-        self.b_sesh = qtw.QPushButton('New session')
+        self.b_sesh = qtw.QPushButton('Session')
         self.l_sesh = qtw.QLabel('(no session)')
         self.b_run_baseline = StopwatchButton('Baseline')
         self.b_run_squeeze = StopwatchButton('Squeeze')
@@ -282,9 +282,9 @@ class Interface(qtw.QWidget):
         self.b_toggle_raw = qtw.QPushButton('Toggle main views')
         self.b_toggle_video = qtw.QPushButton('Toggle video/audio/CO2')
 
-        row0_toolbar_items = [1, self.b_sesh, self.l_sesh, 20,
-                             self.b_reset_xlim, 1,
-                             self.b_toggle_raw, 1,
+        row0_toolbar_items = [1, self.b_sesh, 2, self.l_sesh, 20,
+                             self.b_reset_xlim, 2,
+                             self.b_toggle_raw, 2,
                              self.b_toggle_video, 20,
                               self.b_marker, self.t_marker, 2,
                               self.b_lor, 1, self.b_ror, 1,
@@ -297,8 +297,8 @@ class Interface(qtw.QWidget):
                               self.b_run_chirp, 5,
                               self.b_run_ssep,
                               20,
-                              self.b_bolus, self.t_bolus, 1,
-                              self.b_infusion, self.t_infusion, 1, self.l_infusion_rate, 1,
+                              self.b_bolus, 2, self.t_bolus, 1,
+                              self.b_infusion, 2, self.t_infusion, 1, self.l_infusion_rate, 5,
                               self.b_simulate, 15,
                               self.b_project, 15,
                               self.b_set_tci_target, 2, self.t_set_tci_target, 5,
