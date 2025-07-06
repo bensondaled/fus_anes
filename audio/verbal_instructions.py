@@ -11,12 +11,10 @@ from fus_anes.util import save
 import sounddevice as sd
 import soundfile as sf
 
-sd.default.device = config.audio_in_ch_out_ch
+if config.audio_backend == 'ptb':
+    from psychopy import sound
 
-def play_audio(filename):
-    data, samplerate = sf.read(filename)
-    sd.play(data, samplerate)
-    sd.wait()
+sd.default.device = config.audio_in_ch_out_ch
 
 def pad_str(s):
     # for saving
@@ -64,13 +62,17 @@ class SqueezeInstructions(mproc):
             else:
                 clip = self.get_clip(None)
 
-            data, samplerate = sf.read(clip)
-            isi = max(self.interval[0] + np.random.normal(*self.interval[1]), 0.010)
-            save('squeeze', dict(event=os.path.split(clip)[-1], isi=isi), self.saver_buffer)
+            if config.audio_backend == 'sounddevice':
+                data, samplerate = sf.read(clip)
+            elif config.audio_backend == 'ptb':
+                data = sound.Sound(clip)
+                samplerate = 44100
 
-            sd.play(data, samplerate)
-            sd.wait()
-            time.sleep(isi)
+            playtime = play_tone_precisely(data, samplerate)
+            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=isi), self.saver_buffer)
+            _isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
+            if isi_ms > 0:
+                time.sleep(isi_ms / 1000.0)
 
             idx += 1
         self.playing.value = 0

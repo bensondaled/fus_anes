@@ -11,6 +11,9 @@ from .audio_util import play_tone_precisely
 import sounddevice as sd
 import soundfile as sf
 
+if config.audio_backend == 'ptb':
+    from psychopy import sound
+
 sd.default.device = config.audio_in_ch_out_ch
 
 if config.THREADS_ONLY:
@@ -42,9 +45,14 @@ class Oddball(mproc):
         n_tones = config.oddball_n_tones
         isi_ms = config.oddball_isi_ms
         oddball_ratio = config.oddball_deviant_ratio
-
-        standard_data, fs = sf.read(self.standard_file, dtype='float32')
-        deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
+        
+        if config.audio_backend == 'sounddevice':
+            standard_data, fs = sf.read(self.standard_file, dtype='float32')
+            deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
+        elif config.audio_backend == 'ptb':
+            standard_data = sound.Sound(self.standard_file)
+            deviant_data = sound.Sound(self.deviant_file) 
+            fs = 44100
 
         tone_duration_ms = int(len(standard_data) / fs * 1000)
 

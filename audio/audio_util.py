@@ -1,9 +1,27 @@
 import numpy as np
 import sounddevice as sd
+import fus_anes.config as config
+
+if config.audio_backend == 'ptb':
+    import psychtoolbox as ptb
+    from psychopy import sound
 
 from fus_anes.util import now
 
 def play_tone_precisely(tone_data, fs):
+    if config.audio_backend == 'sounddevice':
+        return play_tone_precisely_sd(tone_data, fs)
+    elif config.audio_backend == 'ptb':
+        return play_tone_precisely_ptb(tone_data, fs)
+
+def play_tone_precisely_ptb(tone_data, fs, play_after=0.150):
+    now_internal = now(minimal=True)
+    now_ptb = ptb.GetSecs()
+    tone_data.play(when=now_ptb + play_after)
+
+    return now_internal + play_after
+
+def play_tone_precisely_sd(tone_data, fs):
     tone_data = np.asarray(tone_data, dtype=np.float32)
     if tone_data.ndim == 1:
         tone_data = tone_data[:, np.newaxis]

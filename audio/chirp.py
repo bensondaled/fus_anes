@@ -11,6 +11,9 @@ from .audio_util import play_tone_precisely
 import sounddevice as sd
 import soundfile as sf
 
+if config.audio_backend == 'ptb':
+    from psychopy import sound
+
 sd.default.device = config.audio_in_ch_out_ch
 
 if config.THREADS_ONLY:
@@ -37,8 +40,14 @@ class Chirp(mproc):
 
     def run(self):
 
-        chirp_data, fs = sf.read(self.chirp_file, dtype='float32')
-        white_data, _ = sf.read(self.chirp_white_file, dtype='float32')
+        if config.audio_backend == 'sounddevice':
+            chirp_data, fs = sf.read(self.chirp_file, dtype='float32')
+            white_data, _ = sf.read(self.chirp_white_file, dtype='float32')
+        elif config.audio_backend == 'ptb':
+            chirp_data = sound.Sound(self.chirp_file)
+            white_data = sound.Sound(self.chirp_white_file) 
+            fs = 44100
+
         tone_duration_ms = int(len(chirp_data) / fs * 1000)
         
         n_reps = config.chirp_n_tones + config.chirp_n_start
