@@ -52,6 +52,8 @@ class Chirp(mproc):
         np.random.shuffle(sequence)
         sequence = np.append(np.array(['c']*config.chirp_n_start), sequence)
 
+        last_playtime = now(minimal=True)
+        _isi = -1
         for seq,isi in zip(sequence, isis):
             if self.kill_flag.value:
                 break
@@ -63,12 +65,15 @@ class Chirp(mproc):
 
             #sd.play(data, fs)
             #sd.wait()
+            if _isi != -1:
+                wait_ms = _isi - 1000*(now(minimal=True)-playtime) - 1000.0 * config.audio_playback_delay
+                if wait_ms > 0:
+                    time.sleep(wait_ms / 1000.0)
+            
             playtime = play_tone_precisely(data, fs)
             save('chirp', dict(event=seq, onset_ts=playtime), self.saver_buffer)
             
-            wait_ms = isi - 1000*(now(minimal=True)-playtime)
-            if wait_ms > 0:
-                time.sleep(wait_ms / 1000.0)
+            _isi = isi
 
         self.playing.value = 0
 
