@@ -70,11 +70,10 @@ fourcc = 'XVID'
 mov_ext = 'avi' # xvid=avi, -1=mp4
 
 # Sound
-audio_in_ch_out_ch = [2, 3]
+audio_in_ch_out_ch = [2, 3] # mic, speaker, use audio_util.probe_audio_devices
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 audio_hdf_resize = audio_save_chunk * 10
-audio_device_idx = 0 # use audio_probe script to identify mics
 n_audio_display = 3.0 # secs
 
 # TCI

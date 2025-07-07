@@ -6,8 +6,13 @@ import fus_anes.config as config
 if config.audio_backend == 'ptb':
     import psychtoolbox as ptb
     from psychopy import sound
+    prefs.hardware['audioLatencyMode'] = 3
+    prefs.hardware['audioLib'] = ['PTB']
 
 from fus_anes.util import now
+
+def probe_audio_devices():
+    print(sd.query_devices())
 
 def play_tone_precisely(tone_data, fs):
     if config.audio_backend == 'sounddevice':

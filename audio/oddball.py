@@ -49,12 +49,12 @@ class Oddball(mproc):
         if config.audio_backend == 'sounddevice':
             standard_data, fs = sf.read(self.standard_file, dtype='float32')
             deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
+            tone_duration_ms = int(len(standard_data) / fs * 1000)
         elif config.audio_backend == 'ptb':
             standard_data = sound.Sound(self.standard_file)
             deviant_data = sound.Sound(self.deviant_file) 
+            tone_duration_ms = standard_data.getDuration() * 1000
             fs = 44100
-
-        tone_duration_ms = int(len(standard_data) / fs * 1000)
 
         n_deviants = int(n_tones * oddball_ratio)
         n_standards = n_tones - n_deviants

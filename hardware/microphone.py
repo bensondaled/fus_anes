@@ -54,7 +54,7 @@ class Microphone(mproc):
         self.start()
 
     def setup_audio(self):
-        self.audio_stream = sd.InputStream(channels=1, device=config.mic_device_idx, samplerate=44100, callback=self.audio_callback)
+        self.audio_stream = sd.InputStream(channels=1, device=config.audio_in_ch_out_ch[0], samplerate=44100, callback=self.audio_callback)
         self.audio_stream.start()
 
     def audio_callback(self, data, n, tinfo, flags):

@@ -43,12 +43,13 @@ class Chirp(mproc):
         if config.audio_backend == 'sounddevice':
             chirp_data, fs = sf.read(self.chirp_file, dtype='float32')
             white_data, _ = sf.read(self.chirp_white_file, dtype='float32')
+            tone_duration_ms = int(len(chirp_data) / fs * 1000)
         elif config.audio_backend == 'ptb':
             chirp_data = sound.Sound(self.chirp_file)
-            white_data = sound.Sound(self.chirp_white_file) 
+            white_data = sound.Sound(self.chirp_white_file)
+            tone_duration_ms = chrip_data.getDuration() * 1000            
             fs = 44100
 
-        tone_duration_ms = int(len(chirp_data) / fs * 1000)
         
         n_reps = config.chirp_n_tones + config.chirp_n_start
         isi_ms = config.chirp_isi_ms
