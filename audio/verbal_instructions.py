@@ -12,9 +12,6 @@ from .audio_util import play_tone_precisely
 import sounddevice as sd
 import soundfile as sf
 
-if config.audio_backend == 'ptb':
-    from psychopy import sound
-
 sd.default.device = config.audio_in_ch_out_ch
 
 def pad_str(s):
@@ -28,7 +25,7 @@ else:
     mproc = mp.Process
 
 class SqueezeInstructions(mproc):
-    def __init__(self, with_nums=True, saver_buffer=None):
+    def __init__(self, with_nums=False, saver_buffer=None):
         super(SqueezeInstructions, self).__init__()
         self.name = config.name.lower()
         self.audio_path = os.path.join(config.verbal_instructions_path, self.name)
@@ -63,11 +60,7 @@ class SqueezeInstructions(mproc):
             else:
                 clip = self.get_clip(None)
 
-            if config.audio_backend == 'sounddevice':
-                data, samplerate = sf.read(clip)
-            elif config.audio_backend == 'ptb':
-                data = sound.Sound(clip)
-                samplerate = 44100
+            data, samplerate = sf.read(clip)
 
             playtime = play_tone_precisely(data, samplerate)
             isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks

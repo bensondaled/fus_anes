@@ -11,11 +11,6 @@ from .audio_util import play_tone_precisely
 import sounddevice as sd
 import soundfile as sf
 
-if config.audio_backend == 'ptb':
-    from psychopy import sound
-
-sd.default.device = config.audio_in_ch_out_ch
-
 if config.THREADS_ONLY:
     mproc = threading.Thread
 else:
@@ -46,15 +41,9 @@ class Oddball(mproc):
         isi_ms = config.oddball_isi_ms
         oddball_ratio = config.oddball_deviant_ratio
         
-        if config.audio_backend == 'sounddevice':
-            standard_data, fs = sf.read(self.standard_file, dtype='float32')
-            deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
-            tone_duration_ms = int(len(standard_data) / fs * 1000)
-        elif config.audio_backend == 'ptb':
-            standard_data = sound.Sound(self.standard_file)
-            deviant_data = sound.Sound(self.deviant_file) 
-            tone_duration_ms = standard_data.getDuration() * 1000
-            fs = 44100
+        standard_data, fs = sf.read(self.standard_file, dtype='float32')
+        deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
+        tone_duration_ms = int(len(standard_data) / fs * 1000)
 
         n_deviants = int(n_tones * oddball_ratio)
         n_standards = n_tones - n_deviants
@@ -74,6 +63,8 @@ class Oddball(mproc):
         print(len(sequence))
 
         # --- play
+        _isi = -1
+        last_playtime = now(minimal=True)
         for i, stim_type in enumerate(sequence):
             if self.kill_flag.value:
                 break
@@ -86,14 +77,18 @@ class Oddball(mproc):
             #sd.play(data, fs)
             #sd.wait()
             dummy = now(minimal=True)
+            
+            if _isi != -1:
+                wait_ms = _isi - 1000*(now(minimal=True)-playtime) - 1000.0 * config.audio_playback_delay
+                if wait_ms > 0:
+                    time.sleep(wait_ms / 1000.0)
+            
             playtime = play_tone_precisely(data, fs)
+            print(f'intended isi: {_isi:0.0f}, true gap: {1000.0*(playtime-last_playtime):0.0f}')
             save('oddball', dict(event=stim_type, onset_ts=playtime, dummy=dummy), self.saver_buffer)
             
             _isi = np.random.randint(*isi_ms)
-            wait_ms = _isi - 1000*(now(minimal=True)-playtime)
-            print(wait_ms, playtime, now(minimal=True))
-            if wait_ms > 0:
-                time.sleep(wait_ms / 1000.0)
+            last_playtime = playtime
 
         self.playing.value = 0
 
