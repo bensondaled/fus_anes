@@ -25,7 +25,7 @@ chirp_white_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp_white
 
 # Verbal instructions
 verbal_instructions_path = '/Users/bdd/data/fus_anes/'
-verbal_instruction_interval = 0.5, (3.0, 1.5) # secs: min, (mean, sd)
+verbal_instruction_interval = (0.750, 4.5) # secs: (min, max)
 verbal_instruction_command = 'squeeze'
 verbal_instructions_n_prepare = 120
 

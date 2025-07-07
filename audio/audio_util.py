@@ -4,10 +4,20 @@ import threading
 import fus_anes.config as config
 
 if config.audio_backend == 'ptb':
-    import psychtoolbox as ptb
     from psychopy import sound
+    from psychtoolbox import audio
+    import psychtoolbox as ptb
+    ptb.PsychPortAudio('Initialize')
+    pahandle = ptb.PsychPortAudio('Open')
 
 from fus_anes.util import now
+
+def end_audio():
+    if self.audio_backend == 'ptb':
+        try:
+            ptb.PsychPortAudio('Close', pahandle)
+        except:
+            pass
 
 def play_tone_precisely(tone_data, fs):
     if config.audio_backend == 'sounddevice':
@@ -15,12 +25,39 @@ def play_tone_precisely(tone_data, fs):
     elif config.audio_backend == 'ptb':
         return play_tone_precisely_ptb(tone_data, fs)
 
-def play_tone_precisely_ptb(tone_data, fs, play_after=0.150):
-    now_internal = now(minimal=True)
+def play_tone_precisely_ptb(tone_data, fs, play_after=0.100):
+    ''' doesnt work right despite being on psychopy website as primary suggestion
     now_ptb = ptb.GetSecs()
     tone_data.play(when=now_ptb + play_after)
-
     return now_internal + play_after
+    '''
+    waveform = tone_data._getSamples()
+    ptb_waveform = waveform.T
+    tone_data = np.array([ptb_waveform, ptb_waveform])
+
+    ptb.PsychPortAudio('FillBuffer', pahandle, audiodata)
+    ptb.PsychPortAudio('Start', pahandle)
+
+    now_internal = now(minimal=True)
+    now_ptb = ptb.GetSecs()
+    start_time = now_ptb + play_after
+    ptb.PsychPortAudio('Start', pahandle, 1, start_time, 0)
+
+    while True:
+        status = ptb.PsychPortAudio('GetStatus', pahandle)
+        if status['Active']:
+            actual_start = status['StartTime']
+            print(f"Actually started at: {actual_start:.6f} (PTB time)")
+            break
+
+    # === Wait for playback to complete ===
+    while True:
+        status = ptb.PsychPortAudio('GetStatus', pahandle)
+        if not status['Active']:
+            break
+
+    ptb.PsychPortAudio('Stop', pahandle, 1)
+
 
 def play_tone_precisely_sd(tone_data, fs):
     tone_data = np.asarray(tone_data, dtype=np.float32)

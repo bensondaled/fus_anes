@@ -10,7 +10,7 @@ import time
 from datetime import datetime as dtm
 
 from fus_anes.hardware import EEG, Pump, Camera, Microphone
-from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball, Chirp
+from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball, Chirp, end_audio
 from fus_anes.util import Saver, multitaper_spectrogram, now, save
 from fus_anes.tci import LiveTCI
 import fus_anes.config as config
@@ -135,4 +135,5 @@ class Session():
             except:
                 logging.error(f'Failed to properly end {te}.')
             time.sleep(0.100)
+        end_audio()
         self.completed = True
