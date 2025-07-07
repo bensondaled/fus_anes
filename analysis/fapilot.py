@@ -192,7 +192,7 @@ sd = np.std(sigs, axis=0) / np.sqrt(len(sigs))
 mean_shuf = fxn(sigs_shuf,axis=0)
 sd_shuf = np.std(sigs_shuf, axis=0) / np.sqrt(len(sigs_shuf))
 
-from fus_anes.constants import MONTAGE
+from fus_anes.constants import MONTAGE # NOTE THIS WILL BE WRONG SINCE CHANGED
 
 fig, axs = pl.subplots(3,4, sharex=True, sharey=True)
 axs = axs.ravel()
@@ -263,7 +263,8 @@ epochs = mne.Epochs(raw, events, event_id=event_id,
                     baseline=(-0.2, 0),
                     detrend=1, preload=True)
 
-#epochs.pick_channels(['Cz', 'Fz', 'Pz'])  # or just use all
+#epochs.pick_channels(['Cz', 'Fz', 'Pz'])  # or just use all: comment this out
+#epochs.pick_channels(['P7', 'Oz', 'P8'])
 
 frequencies = np.linspace(25, 55, 30)
 n_cycles = frequencies / 2.0  # higher freqs need more cycles
@@ -277,6 +278,7 @@ power.plot(picks='Fz', baseline=(-0.2, 0), mode='logratio',
 
 # Inter-trial coherence (phase-locking)
 itc.plot(picks='Fz', title='ITC')
+#itc.plot(picks='C4', title='ITC')
 
 # ----------------------
 # 7. Optional: Plot frequency tracking curve
