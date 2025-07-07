@@ -18,7 +18,7 @@ duration = 0.5  # Duration in seconds
 carrier_freq = 1000  # Carrier tone in Hz
 mod_start = 55  # Start frequency of modulation (Hz)
 mod_end = 25  # End frequency (Hz)
-ramp_duration = 0.01  # Onset/offset ramp in seconds
+ramp_duration = 0.005  # Onset/offset ramp in seconds
 
 def generate_chirp(kind):
     t = np.linspace(0, duration, int(fs * duration), endpoint=False)

@@ -8,7 +8,7 @@ def generate_tone(freq, duration_ms=100, sample_rate=44100, amplitude=0.5):
     t = np.linspace(0, duration_ms / 1000, int(sample_rate * duration_ms / 1000), endpoint=False)
     tone = amplitude * np.sin(2 * np.pi * freq * t)
     # 10 ms linear ramp fade-in and fade-out
-    ramp_len = int(sample_rate * 0.010)
+    ramp_len = int(sample_rate * 0.005)
     ramp = np.linspace(0, 1, ramp_len)
     tone[:ramp_len] *= ramp
     tone[-ramp_len:] *= ramp[::-1]

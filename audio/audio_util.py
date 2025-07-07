@@ -1,5 +1,6 @@
 import numpy as np
 import sounddevice as sd
+import threading
 import fus_anes.config as config
 
 if config.audio_backend == 'ptb':
@@ -25,9 +26,14 @@ def play_tone_precisely_sd(tone_data, fs):
     tone_data = np.asarray(tone_data, dtype=np.float32)
     if tone_data.ndim == 1:
         tone_data = tone_data[:, np.newaxis]
+    
+    # needed to help prevent clicks on some external speakers and headphones:
+    silence = np.zeros((int(0.020 * fs), tone_data.shape[1]))
+    tone_data = np.concatenate([tone_data, silence], axis=0)
 
     buffer = tone_data.copy()
     onset_time = []
+    done = threading.Event()
 
     def callback(outdata, frames, time_info, status):
         nonlocal buffer
@@ -43,10 +49,11 @@ def play_tone_precisely_sd(tone_data, fs):
         buffer = buffer[n:]
 
         if len(buffer) == 0:
-            raise sd.CallbackStop()
+            done.set()
 
-    with sd.OutputStream(samplerate=fs, channels=1, callback=callback, dtype='float32'):
-        sd.sleep(int(len(tone_data) / fs * 1000) + 20)
+    with sd.OutputStream(samplerate=fs, channels=1, callback=callback, dtype='float32', device=config.audio_in_ch_out_ch[1]):
+        done.wait()
+        #sd.sleep(int(len(tone_data) / fs * 1000) + 20)
 
     return onset_time[0] if onset_time else None
 
