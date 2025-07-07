@@ -5,6 +5,7 @@ import fus_anes.config as config
 
 if config.audio_backend == 'ptb':
     from psychopy import sound
+<<<<<<< HEAD
     from psychtoolbox import audio
     import psychtoolbox as ptb
     ptb.PsychPortAudio('Initialize')
@@ -18,6 +19,15 @@ def end_audio():
             ptb.PsychPortAudio('Close', pahandle)
         except:
             pass
+=======
+    prefs.hardware['audioLatencyMode'] = 3
+    prefs.hardware['audioLib'] = ['PTB']
+
+from fus_anes.util import now
+
+def probe_audio_devices():
+    print(sd.query_devices())
+>>>>>>> refs/remotes/origin/main
 
 def play_tone_precisely(tone_data, fs):
     if config.audio_backend == 'sounddevice':
