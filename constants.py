@@ -22,4 +22,4 @@ MONTAGE = [
 # 0-index
 passive_eeg_frontal = [0,1,2]
 passive_eeg_posterior = [9,10,11]
-passive_reference_electrode_idx = 12 # 0-indexed
+passive_reference_electrode_idx = 16 # 0-indexed

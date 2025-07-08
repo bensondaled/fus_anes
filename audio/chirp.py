@@ -6,13 +6,10 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save, now
-from .audio_util import play_tone_precisely
+from .audio_util import play_tone_precisely, load_audio
 
 import sounddevice as sd
 import soundfile as sf
-
-if config.audio_backend == 'ptb':
-    from psychopy import sound
 
 sd.default.device = config.audio_in_ch_out_ch
 
@@ -40,15 +37,9 @@ class Chirp(mproc):
 
     def run(self):
 
-        if config.audio_backend == 'sounddevice':
-            chirp_data, fs = sf.read(self.chirp_file, dtype='float32')
-            white_data, _ = sf.read(self.chirp_white_file, dtype='float32')
-            tone_duration_ms = int(len(chirp_data) / fs * 1000)
-        elif config.audio_backend == 'ptb':
-            chirp_data = sound.Sound(self.chirp_file)
-            white_data = sound.Sound(self.chirp_white_file)
-            tone_duration_ms = chrip_data.getDuration() * 1000            
-            fs = 44100
+        chirp_data, fs = load_audio(self.chirp_file)
+        white_data, _ = load_audio(self.chirp_white_file)
+        tone_duration_ms = int(len(chirp_data) / fs * 1000)
 
         
         n_reps = config.chirp_n_tones + config.chirp_n_start
@@ -61,6 +52,8 @@ class Chirp(mproc):
         np.random.shuffle(sequence)
         sequence = np.append(np.array(['c']*config.chirp_n_start), sequence)
 
+        last_playtime = now(minimal=True)
+        _isi = -1
         for seq,isi in zip(sequence, isis):
             if self.kill_flag.value:
                 break
@@ -72,12 +65,15 @@ class Chirp(mproc):
 
             #sd.play(data, fs)
             #sd.wait()
+            if _isi != -1:
+                wait_ms = _isi - 1000*(now(minimal=True)-playtime) - 1000.0 * config.audio_playback_delay
+                if wait_ms > 0:
+                    time.sleep(wait_ms / 1000.0)
+            
             playtime = play_tone_precisely(data, fs)
             save('chirp', dict(event=seq, onset_ts=playtime), self.saver_buffer)
             
-            wait_ms = isi - 1000*(now(minimal=True)-playtime)
-            if wait_ms > 0:
-                time.sleep(wait_ms / 1000.0)
+            _isi = isi
 
         self.playing.value = 0
 

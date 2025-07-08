@@ -1,9 +1,13 @@
 import numpy as np
 import sounddevice as sd
 import threading
+from scipy.signal import resample
+import soundfile as sf
 
 import fus_anes.config as config
 from fus_anes.util import now
+
+sd.default.device = config.audio_in_ch_out_ch
 
 if config.audio_backend == 'ptb':
     from psychopy import sound, prefs
@@ -12,15 +16,28 @@ if config.audio_backend == 'ptb':
 
     from psychtoolbox import audio
     import psychtoolbox as ptb
-    ptb.PsychPortAudio('Initialize')
-    pahandle = ptb.PsychPortAudio('Open')
+    pahandle = ptb.PsychPortAudio('Open', config.audio_in_ch_out_ch[1], 1, 3, config.audio_playback_fs)
 
 def end_audio():
-    if self.audio_backend == 'ptb':
+    if config.audio_backend == 'ptb':
         try:
             ptb.PsychPortAudio('Close', pahandle)
         except:
             pass
+            
+def load_audio(file_path):
+    data, fs = sf.read(file_path) # dtype='float32'
+    if fs != config.audio_playback_fs:
+
+        if data.ndim > 1:
+            data = data[:, 0] # makes mono
+
+        num_samples_orig = len(data)
+        num_samples_new = int(num_samples_orig * (config.audio_playback_fs / fs))
+
+        data = resample(data, num_samples_new)
+        fs = config.audio_playback_fs
+    return data, fs
 
 def probe_audio_devices():
     print(sd.query_devices())
@@ -31,18 +48,15 @@ def play_tone_precisely(tone_data, fs):
     elif config.audio_backend == 'ptb':
         return play_tone_precisely_ptb(tone_data, fs)
 
-def play_tone_precisely_ptb(tone_data, fs, play_after=0.100):
+def play_tone_precisely_ptb(tone_data, fs, play_after=config.audio_playback_delay):
     ''' doesnt work right despite being on psychopy website as primary suggestion
     now_ptb = ptb.GetSecs()
     tone_data.play(when=now_ptb + play_after)
     return now_internal + play_after
     '''
-    waveform = tone_data._getSamples()
-    ptb_waveform = waveform.T
-    tone_data = np.array([ptb_waveform, ptb_waveform])
+    tone_data_ptb = np.array([tone_data, tone_data]).T
 
-    ptb.PsychPortAudio('FillBuffer', pahandle, audiodata)
-    ptb.PsychPortAudio('Start', pahandle)
+    ptb.PsychPortAudio('FillBuffer', pahandle, tone_data_ptb)
 
     now_internal = now(minimal=True)
     now_ptb = ptb.GetSecs()
@@ -53,7 +67,6 @@ def play_tone_precisely_ptb(tone_data, fs, play_after=0.100):
         status = ptb.PsychPortAudio('GetStatus', pahandle)
         if status['Active']:
             actual_start = status['StartTime']
-            print(f"Actually started at: {actual_start:.6f} (PTB time)")
             break
 
     # === Wait for playback to complete ===
@@ -63,6 +76,9 @@ def play_tone_precisely_ptb(tone_data, fs, play_after=0.100):
             break
 
     ptb.PsychPortAudio('Stop', pahandle, 1)
+       
+    true_delay = actual_start - now_ptb
+    return now_internal + true_delay
 
 
 def play_tone_precisely_sd(tone_data, fs):
