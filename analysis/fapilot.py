@@ -212,18 +212,19 @@ for chan in range(0, 12):
 
 
 ## ----------squeeze
-with pd.HDFStore('/Users/bdd/Desktop/2025-07-04_18-15-38_subject-test_subject.h5', 'r') as h:
+from fus_anes.constants import MONTAGE
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
     eeg = h.eeg
     sq = h.squeeze
 eeg_time = eeg.index.values
-eeg = eeg.iloc[:, :16].values
+eeg = eeg.iloc[:, :18].values
 fs = 500
-eeg = filter_eeg(eeg, fs=fs)
-switch = eeg[:,15]
+eeg = filter_eeg(eeg, fs=fs, lo=20, hi=0.1, notch=60)
+switch = eeg[:,17]
 fig,ax = pl.subplots()
 ax.plot(eeg_time,switch)
 sq = sq[sq.event.str.endswith('mp3')]
-for t in sq.index.values:
+for t in sq.onset_ts.values:
     ax.axvline(t, color='k')
 
 

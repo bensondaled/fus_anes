@@ -46,7 +46,7 @@ class SqueezeInstructions(mproc):
         return path
 
     def play(self):
-        save('squeeze', dict(event='play',onset_ts=-1.0, isi=-1.0), self.saver_buffer)
+        save('squeeze', dict(event='play',onset_ts=np.nan, isi=np.nan), self.saver_buffer)
         self.start()
 
     def run(self):
@@ -64,7 +64,7 @@ class SqueezeInstructions(mproc):
 
             playtime = play_tone_precisely(data, samplerate)
             isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
-            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=isi_ms), self.saver_buffer)
+            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=float(isi_ms)), self.saver_buffer)
             if isi_ms > 0:
                 time.sleep(isi_ms / 1000.0)
 
@@ -99,9 +99,6 @@ class BaselineEyes(mproc):
             if self.kill_flag.value:
                 break
             data, samplerate = load_audio(path)
-            
-
-
             
             save('bl_eyes', dict(event=os.path.split(path)[-1]), self.saver_buffer)
             sd.play(data, samplerate)

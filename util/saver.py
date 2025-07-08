@@ -73,33 +73,36 @@ class Saver(mp.Process):
             field_buffers = {} # categories items from self.buffer, then writes
 
             while True:
-                record = self.buffer.get(block=True, timeout=None)
+                try:
+                    record = self.buffer.get(block=True, timeout=None)
 
-                if record is None: # sentinel to end
-                    break
-                
-                label, data, ls, ts, ps, columns = record
+                    if record is None: # sentinel to end
+                        break
+                    
+                    label, data, ls, ts, ps, columns = record
 
-                if not isinstance(data, pd.DataFrame):
-                    idx = np.atleast_1d(np.squeeze([ls]))
-                    data = pd.DataFrame(data, columns=columns, index=idx)
-                elif isinstance(data, pd.DataFrame):
-                    data.set_index([[ls]*len(data)], inplace=True)
+                    if not isinstance(data, pd.DataFrame):
+                        idx = np.atleast_1d(np.squeeze([ls]))
+                        data = pd.DataFrame(data, columns=columns, index=idx)
+                    elif isinstance(data, pd.DataFrame):
+                        data.set_index([[ls]*len(data)], inplace=True)
 
-                data.loc[:, 'session'] = self.session_id
-                data.loc[:, 'pc_stamp'] = ps
-                data.loc[:, 'time_stamp'] = ts
+                    data.loc[:, 'session'] = self.session_id
+                    data.loc[:, 'pc_stamp'] = ps
+                    data.loc[:, 'time_stamp'] = ts
 
-                # add to label-specific buffer
-                if label in field_buffers:
-                    field_buffers[label].append(data)
-                else:
-                    field_buffers[label] = [data]
-                
-                # flush buffers as indicated
-                field_buffer = field_buffers[label]
-                if len(field_buffer) >= self.buffer_size:
-                    self.flush_buffer(field_buffers, label)
+                    # add to label-specific buffer
+                    if label in field_buffers:
+                        field_buffers[label].append(data)
+                    else:
+                        field_buffers[label] = [data]
+                    
+                    # flush buffers as indicated
+                    field_buffer = field_buffers[label]
+                    if len(field_buffer) >= self.buffer_size:
+                        self.flush_buffer(field_buffers, label)
+                except Exception as e:
+                    self.error_queue.put(f'Saver: {str(e)}')
             # end main loop
 
             # final write
@@ -121,13 +124,15 @@ class Saver(mp.Process):
        
         try:
             with pd.HDFStore(self.data_file, mode='a') as f:
+                print(label, to_write.dtypes)
                 f.append(label, to_write,
                               index=False,
                               data_columns=['session','time_stamp'],
                               complevel=0)
+                print(f[label].dtypes)
             field_buffers[label] = []
         except Exception as e:
-            self.error_queue.put(f'Saver: {str(e)}')
+            self.error_queue.put(f'Saver buffer flush: {str(e)}')
                     
     def end(self):
         self.buffer.put(None) # sentinel flag to end
