@@ -231,7 +231,7 @@ for t in sq.index.values:
 import mne
 import pandas as pd
 
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-04_18-07-45_subject-test_subject.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
     eeg = h.eeg
     chirp = h.chirp
 eeg_time = eeg.index.values
@@ -302,14 +302,15 @@ import numpy as np
 import mne
 
 # --- 1. Load your data and events ---
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-04_17-38-41_subject-test_subject.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
     eeg = h.eeg
     ob = h.oddball
 
 eeg_time = eeg.index.values
-data = eeg.iloc[:,:13].values.T * 1e-6
+data = eeg.iloc[:,:14].values.T * 1e-6
 sfreq = 500.0
-channel_names = ['F3', 'Fz', 'F4', 'C3', 'Cz', 'C4', 'P3', 'Pz', 'P4', 'P7', 'Oz', 'P8', 'Fpz']
+#from fus_anes.constants import MONTAGE
+channel_names = MONTAGE[:14]
 def t2i(t):
     return np.argmin(np.abs(eeg_time - t))
 montage = mne.channels.make_standard_montage('standard_1020')
@@ -333,6 +334,7 @@ info = mne.create_info(ch_names=channel_names, sfreq=sfreq, ch_types='eeg')
 raw = mne.io.RawArray(data, info)
 raw.set_montage(montage)
 #raw.set_eeg_reference('average')
+raw.set_eeg_reference(['M1', 'M2'])
 
 
 # Filter data (optional but recommended)
@@ -371,9 +373,10 @@ ax.grid(True)
 ## MNE ssep
 import numpy as np
 import mne
+from fus_anes.constants import MONTAGE
 
 # 1. Load your data and events
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-04_17-38-41_subject-test_subject.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
     eeg = h.eeg
     markers = h.markers
 eeg_time = eeg.index.values
@@ -381,19 +384,24 @@ eeg_time = np.linspace(eeg_time[0], eeg_time[-1], len(eeg_time))
 def t2i(t):
     return np.argmin(np.abs(eeg_time-t))
 eeg = eeg.iloc[:, :16].values
-data = eeg[:,:13].T * 1e-6
+data = eeg[:,:14].T * 1e-6
 
-sfreq = 500.0
-channel_names = ['F3', 'Fz', 'F4', 'C3', 'Cz', 'C4', 'P3', 'Pz', 'P4', 'P7', 'Oz', 'P8', 'Fpz']
+fs = 500.0
+channel_names = MONTAGE[:14]
 montage = mne.channels.make_standard_montage('standard_1020')
 
 # Event onsets in samples (stimulus triggers)
 ssep = eeg[:,14]
-ssep = filter_eeg(ssep, fs=fs, lo=fs/2-0.1, hi=25, notch=60)
+ssep = filter_eeg(ssep, fs=fs, lo=fs/2-0.1, hi=60, notch=60)
 # first round
-t0 = 4870321
-t1 = 4870658
-height = 1000
+t0 = markers.iloc[4].t
+t1 = markers.iloc[5].t
+#t0 = markers.iloc[13].t
+#t1 = markers.iloc[14].t
+#t0 = markers.iloc[16].t
+#t1 = markers.iloc[17].t
+
+height = 50
 i0 = t2i(t0)
 i1 = t2i(t1)
 eeg_time = eeg_time[i0:i1]
@@ -402,7 +410,7 @@ ssep = ssep[i0:i1]
 onset = (ssep[1:]>height) & (ssep[:-1]<=height)
 onset_idx = np.arange(len(ssep)-1)[onset] +1
 onset_idx = onset_idx[onset_idx > 100] # so there's pad before it
-onset_idx -= int(0.008 * fs)# this is a manual pullback because i have to detect peaks but the pulse started before those peaks, visually verify its right
+onset_idx -= int(0.002 * fs)# this is a manual pullback because i have to detect peaks but the pulse started before those peaks, visually verify its right
 
 hz = len(onset_idx) / (eeg_time[-1] - eeg_time[0])
 print(f'{len(onset_idx)} in {eeg_time[-1]-eeg_time[0]:0.1f}secs suggests ~{hz:0.1f}hz')
@@ -417,10 +425,10 @@ events_samples = onset_idx
 events = np.column_stack((events_samples, np.zeros_like(events_samples), np.ones_like(events_samples))).astype(int)
 
 # 2. Create Raw object
-info = mne.create_info(ch_names=channel_names, sfreq=sfreq, ch_types='eeg')
+info = mne.create_info(ch_names=channel_names, sfreq=fs, ch_types='eeg')
 raw = mne.io.RawArray(data, info)
 raw.set_montage(montage)
-#raw.set_eeg_reference('average')
+raw.set_eeg_reference(['M1', 'M2'])
 
 
 # 3. Filter data to typical SSEP band (e.g., 1-100 Hz)
@@ -428,8 +436,8 @@ raw.notch_filter(freqs=60., fir_design='firwin')
 raw.filter(l_freq=1., h_freq=100., fir_design='firwin')
 
 # 4. Re-reference - e.g., linked mastoids or average reference
-# raw.set_eeg_reference('average')  # or
-# raw.set_eeg_reference(['M1', 'M2'])  # if mastoids available
+raw.set_eeg_reference('average')  # or
+#raw.set_eeg_reference(['M1', 'M2'])  # if mastoids available
 
 # 5. Epoch data around stim pulse (e.g., -50 ms to +200 ms)
 epochs = mne.Epochs(raw, events, event_id=1,
@@ -441,10 +449,10 @@ epochs = mne.Epochs(raw, events, event_id=1,
 evoked = epochs.average()
 
 # 7. Plot evoked waveforms for C3, C4, and P7 (ipsilateral and contralateral)
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = pl.subplots(figsize=(8, 5))
 times_ms = evoked.times * 1000
 
-for ch_name in ['C3', 'C4', 'P7']:
+for ch_name in ['C3', 'C4', 'P7', 'P8', 'F3', 'F4', 'Oz']:
     ch_idx = evoked.ch_names.index(ch_name)
     ax.plot(times_ms, evoked.data[ch_idx] * 1e6, label=ch_name)
 
@@ -454,7 +462,6 @@ ax.set_ylabel('Amplitude (µV)')
 ax.set_title('Median Nerve SSEP')
 ax.legend()
 ax.grid(True)
-plt.show()
 
 
 ##
