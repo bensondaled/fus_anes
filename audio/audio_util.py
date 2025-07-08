@@ -1,6 +1,8 @@
 import numpy as np
 import sounddevice as sd
 import threading
+from scipy.signal import resample
+import soundfile as sf
 
 import fus_anes.config as config
 from fus_anes.util import now
@@ -14,7 +16,7 @@ if config.audio_backend == 'ptb':
 
     from psychtoolbox import audio
     import psychtoolbox as ptb
-    pahandle = ptb.PsychPortAudio('Open')
+    pahandle = ptb.PsychPortAudio('Open', config.audio_in_ch_out_ch[1], 1, 3, config.audio_playback_fs)
 
 def end_audio():
     if config.audio_backend == 'ptb':
@@ -22,6 +24,20 @@ def end_audio():
             ptb.PsychPortAudio('Close', pahandle)
         except:
             pass
+            
+def load_audio(file_path):
+    data, fs = sf.read(file_path) # dtype='float32'
+    if fs != config.audio_playback_fs:
+
+        if data.ndim > 1:
+            data = data[:, 0] # makes mono
+
+        num_samples_orig = len(data)
+        num_samples_new = int(num_samples_orig * (config.audio_playback_fs / fs))
+
+        data = resample(data, num_samples_new)
+        fs = config.audio_playback_fs
+    return data, fs
 
 def probe_audio_devices():
     print(sd.query_devices())

@@ -7,7 +7,7 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save
-from .audio_util import play_tone_precisely
+from .audio_util import play_tone_precisely, load_audio
 
 import sounddevice as sd
 import soundfile as sf
@@ -60,7 +60,7 @@ class SqueezeInstructions(mproc):
             else:
                 clip = self.get_clip(None)
 
-            data, samplerate = sf.read(clip)
+            data, samplerate = load_audio(clip)
 
             playtime = play_tone_precisely(data, samplerate)
             isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
@@ -98,7 +98,11 @@ class BaselineEyes(mproc):
         for path in paths:
             if self.kill_flag.value:
                 break
-            data, samplerate = sf.read(path)
+            data, samplerate = load_audio(path)
+            
+
+
+            
             save('bl_eyes', dict(event=os.path.split(path)[-1]), self.saver_buffer)
             sd.play(data, samplerate)
             sd.wait()

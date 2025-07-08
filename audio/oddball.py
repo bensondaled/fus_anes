@@ -6,7 +6,7 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save, now
-from .audio_util import play_tone_precisely
+from .audio_util import play_tone_precisely, load_audio
 
 import sounddevice as sd
 import soundfile as sf
@@ -41,8 +41,8 @@ class Oddball(mproc):
         isi_ms = config.oddball_isi_ms
         oddball_ratio = config.oddball_deviant_ratio
         
-        standard_data, fs = sf.read(self.standard_file, dtype='float32')
-        deviant_data, _ = sf.read(self.deviant_file, dtype='float32') 
+        standard_data, fs = load_audio(self.standard_file)
+        deviant_data, _ = load_audio(self.deviant_file) 
         tone_duration_ms = int(len(standard_data) / fs * 1000)
 
         n_deviants = int(n_tones * oddball_ratio)

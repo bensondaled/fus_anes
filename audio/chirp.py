@@ -6,7 +6,7 @@ import multiprocessing as mp
 
 import fus_anes.config as config
 from fus_anes.util import save, now
-from .audio_util import play_tone_precisely
+from .audio_util import play_tone_precisely, load_audio
 
 import sounddevice as sd
 import soundfile as sf
@@ -37,8 +37,8 @@ class Chirp(mproc):
 
     def run(self):
 
-        chirp_data, fs = sf.read(self.chirp_file, dtype='float32')
-        white_data, _ = sf.read(self.chirp_white_file, dtype='float32')
+        chirp_data, fs = load_audio(self.chirp_file)
+        white_data, _ = load_audio(self.chirp_white_file)
         tone_duration_ms = int(len(chirp_data) / fs * 1000)
 
         
