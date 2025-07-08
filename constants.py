@@ -13,13 +13,13 @@ MONTAGE = [
                 'P8', #11/12
                 'M1', #12/13
                 'M2', #13/14
-                'ecg', #14/15
-                'ssep', #15/16
-                'FCz', #16/17 (ref)
+                'FCz', #14/15 (ref)
+                'ecg', #15/16
+                'ssep', #16/17
                 'gripswitch', #17/18 (aux)
             ]
 
 # 0-index
 passive_eeg_frontal = [0,1,2]
 passive_eeg_posterior = [9,10,11]
-passive_reference_electrode_idx = 16 # 0-indexed
+passive_reference_electrode_idx = 14 # 0-indexed

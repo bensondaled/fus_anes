@@ -236,9 +236,10 @@ with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5',
     eeg = h.eeg
     chirp = h.chirp
 eeg_time = eeg.index.values
-data = eeg.iloc[:,:12].values.T * 1e-6
+data = eeg.iloc[:,:14].values.T * 1e-6
 sfreq = 500.0  # Hz
-channel_names = ['F3', 'Fz', 'F4', 'C3', 'Cz', 'C4', 'P3', 'Pz', 'P4', 'P7', 'Oz', 'P8']
+from fus_anes.constants import MONTAGE
+channel_names = MONTAGE[:14]
 def t2i(t):
     return np.argmin(np.abs(eeg_time - t))
 onsets = chirp[chirp.event=='c'].onset_ts.values
@@ -274,7 +275,7 @@ power, itc = mne.time_frequency.tfr_morlet(
     epochs, freqs=frequencies, n_cycles=n_cycles,
     use_fft=True, return_itc=True, decim=2, n_jobs=1)
 
-power.plot(picks='Fz', baseline=(-0.2, 0), mode='logratio',
+power.plot(picks='Fz', baseline=(-0.1, 0), mode='logratio',
            title='Evoked power')
 
 # Inter-trial coherence (phase-locking)
@@ -453,9 +454,11 @@ evoked = epochs.average()
 fig, ax = pl.subplots(figsize=(8, 5))
 times_ms = evoked.times * 1000
 
-for ch_name in ['C3', 'C4', 'P7', 'P8', 'F3', 'F4', 'Oz']:
+#for ch_name in ['C3', 'C4', 'P7', 'P8', 'F3', 'F4', 'Oz']:
+cols = ['maroon', 'lightgrey']
+for ch_name, col in zip(['C4', 'Oz'], cols):
     ch_idx = evoked.ch_names.index(ch_name)
-    ax.plot(times_ms, evoked.data[ch_idx] * 1e6, label=ch_name)
+    ax.plot(times_ms, evoked.data[ch_idx] * 1e6, label=ch_name, color=col, lw=2)
 
 ax.axvline(0, color='k', linestyle='--')
 ax.set_xlabel('Time (ms)')
