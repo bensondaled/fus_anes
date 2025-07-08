@@ -16,10 +16,12 @@ red_path = os.path.join(config.post_test_graphics_path, 'red.jpeg')
 symbol_path = os.path.join(config.post_test_graphics_path, 'symbols')
 num_path = os.path.join(config.post_test_graphics_path, 'nums')
 
-win = visual.Window(fullscr=False, color='black', units='norm')
+win = visual.Window(fullscr=True, color='black', units='norm')
 text = visual.TextStim(win, text='', color='white', height=0.07, wrapWidth=1.5)
 kb = keyboard.Keyboard()
 kb.clearEvents()
+
+move_on = False
 
 def log(task, data):
     with open(data_file, 'a') as f:
@@ -37,18 +39,25 @@ def show_msg(message, wait_keys=['space']):
     event.waitKeys(keyList=wait_keys)
 
 
-
-
 # === Psychomotor Vigilance Task (Visual) ===
+'''analysis plan:
+- lapse means >500ms to answer
+- Mean RT
+- SD RT
+- # Lapses
+- Fastest 10% RT
+- Slowest 10% RT
+'''
 red_box = visual.ImageStim(win, image=red_path,
 								size=(0.4,0.4),
 								pos=[0, 0],
                                 units='norm')
 yellow_counter = visual.TextStim(win, text='', color='yellow', height=0.1)
 
-total_trials = 5
+total_trials = 40
 min_interval = 2
 max_interval = 10
+max_wait = 2.5
 
 for trial in range(total_trials):
     red_box.draw()
@@ -68,6 +77,7 @@ for trial in range(total_trials):
 
     kb.clearEvents()
     kb.clock.reset()
+    start = kb.clock.getTime()
     # Update yellow counter every frame until response
     while True:
         now = kb.clock.getTime()
@@ -77,28 +87,38 @@ for trial in range(total_trials):
         red_box.draw()
         yellow_counter.draw()
         win.flip()
-        
-        keys = kb.getKeys(['space'], waitRelease=True)
+
+        keys = kb.getKeys(['space', 'escape'], waitRelease=True)
         if keys:
             response = keys[0]
             rt = response.rt
+            if response.name == 'escape':
+                move_on = True
             break
-
+        
+        if now-start >= max_wait:
+            rt = -1.0
+            break
+    
+    if move_on:
+        break
     log('pvt', dict(delay=start_delay, rt=rt, displayed_rt_ms=ms, note=''))
-    core.wait(1.0)
+    core.wait(0.750)
     win.flip()
-    core.wait(1.0)
+    core.wait(0.750)
 
 
 
 
 # === Digit Symbol Substitution Task (DSST) ===
 # Visual key map setup
+total_duration = 90.0 # secs
+
 symbol_names = sorted(os.listdir(symbol_path))
 np.random.shuffle(symbol_names)
 num_names = sorted(os.listdir(num_path))
               
-allowed_responses = [str(i) for i in range(1,10)]
+allowed_responses = [str(i) for i in range(1,10)] + ['escape']
 key_images = []
 ypos_s = 0.7
 ypos_n = 0.5
@@ -114,7 +134,9 @@ for i,(sn,nn) in enumerate(zip(symbol_names, num_names)):
     key_images.append([sym_img, num_img])
 
 log('dsst', dict(sym=symbol_names, num=num_names))
-for i in range(10):
+
+start = kb.clock.getTime()
+while True:
     ans = np.random.choice(symbol_names)
     
     # show key for a sec
@@ -138,9 +160,12 @@ for i in range(10):
         key = kb.getKeys(allowed_responses, waitRelease=True)
         core.wait(0.01)
     key = key[0]
+    if key.name == 'escape':
+        break
     log('dsst', dict(sym=ans, key=key.name, rt=key.rt))
-    
-    
 
+    if kb.clock.getTime() - start >= total_duration:
+        break
+    
 win.close()
 core.quit()
