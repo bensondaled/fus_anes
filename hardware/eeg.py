@@ -244,7 +244,7 @@ class EEG(tcls):
                     lfilt.hi = hi
                     lfilt.notch = notch
                     lfilt.refresh_filter()
-                #dat[:,:-self.n_timefields] = lfilt(dat[:,:-self.n_timefields]) #TEMP BLOCKED
+                dat[:,:-self.n_timefields] = lfilt(dat[:,:-self.n_timefields]) #TEMP BLOCKED
                 
                 # update memory with new data
                 self.memory = np.roll(self.memory,

@@ -46,7 +46,7 @@ class SqueezeInstructions(mproc):
         return path
 
     def play(self):
-        save('squeeze', dict(event='play', isi=-1.0), self.saver_buffer)
+        save('squeeze', dict(event='play',onset_ts=-1.0, isi=-1.0), self.saver_buffer)
         self.start()
 
     def run(self):
