@@ -218,14 +218,17 @@ with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5',
     sq = h.squeeze
 eeg_time = eeg.index.values
 eeg = eeg.iloc[:, :18].values
+t = eeg_time - eeg_time[0]
 fs = 500
 eeg = filter_eeg(eeg, fs=fs, lo=20, hi=0.1, notch=60)
 switch = eeg[:,17]
-fig,ax = pl.subplots()
-ax.plot(eeg_time,switch)
+fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
+ax.plot(t,switch)
 sq = sq[sq.event.str.endswith('mp3')]
 for t in sq.onset_ts.values:
-    ax.axvline(t, color='k')
+    ax.axvline(t-eeg_time[0]+1.4, color='grey') # 1.4 just for clip duration
+ax.set_xlim([37, 63])
+ax.set_ylim([-6077136.377254958, 1815696.37])
 
 
 ## fancy chirp
@@ -371,6 +374,20 @@ ax.set_title('Auditory Oddball ERPs at Cz')
 ax.legend()
 ax.grid(True)
 
+# topo map
+# Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
+tmin_pp, tmax_pp = 0.100, 0.300  # in seconds
+evoked_s_crop = evoked_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
+evoked_d_crop = evoked_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
+ptp_s_amplitudes = evoked_s_crop.data.ptp(axis=1) * 1e6  # Convert to µV
+ptp_d_amplitudes = evoked_d_crop.data.ptp(axis=1) * 1e6  # Convert to µV
+dif = ptp_d_amplitudes - ptp_s_amplitudes
+
+# Plot the topomap of these amplitudes
+fig_topo, ax_topo = pl.subplots(1, 1)
+mne.viz.plot_topomap(ptp_d_amplitudes, evoked_deviant.info, axes=ax_topo,
+                     show=True, cmap='Reds', contours=0)
+
 
 ## MNE ssep
 import numpy as np
@@ -467,5 +484,17 @@ ax.set_title('Median Nerve SSEP')
 ax.legend()
 ax.grid(True)
 
+# topo map
+# Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
+tmin_pp, tmax_pp = 0.020, 0.050  # in seconds
+#tmin_pp, tmax_pp = 0.050, 0.075  # in seconds
+evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
+ptp_amplitudes = evoked_crop.data.ptp(axis=1) * 1e6  # Convert to µV
+
+# Plot the topomap of these amplitudes
+fig_topo, ax_topo = pl.subplots(1, 1)
+mne.viz.plot_topomap(ptp_amplitudes, evoked.info, axes=ax_topo,
+                     show=True, cmap='Reds', contours=0)
+ax_topo.set_title(f'Peak-to-peak SSEP (µV) {int(tmin_pp*1000)}–{int(tmax_pp*1000)} ms')
 
 ##
