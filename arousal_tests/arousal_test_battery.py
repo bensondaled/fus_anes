@@ -8,6 +8,7 @@ import os
 import json
 import numpy as np
 from datetime import datetime as dtm
+import time
 
 import fus_anes.config as config
 
@@ -143,8 +144,9 @@ for i,(sn,nn) in enumerate(zip(symbol_names, num_names)):
     key_images.append([sym_img, num_img])
 
 log('dsst', dict(sym=symbol_names, num=num_names))
+ref_key = {sn:nn for sn,nn in zip(symbol_names, num_names)}
 
-start = kb.clock.getTime()
+start = time.perf_counter()
 while True:
     ans = np.random.choice(symbol_names)
     
@@ -171,9 +173,9 @@ while True:
     key = key[0]
     if key.name == 'escape':
         break
-    log('dsst', dict(sym=ans, key=key.name, rt=key.rt))
-
-    if kb.clock.getTime() - start >= total_duration:
+    log('dsst', dict(sym=ans, key=key.name, rt=key.rt, target=ref_key[ans]))
+    
+    if time.perf_counter() - start >= total_duration:
         break
     
 win.close()
