@@ -59,7 +59,7 @@ cmap = 'rainbow'
 eeg_baseline_gain = 1
 eeg_gain_zoom_factor = 10000 / eeg_baseline_gain # high: finer
 spect_log = True
-eeg_special_filters = { 17: dict(lo=20, hi=0.1, notch=eeg_notch, gain=0.1), # gripswitch
+eeg_special_filters = { 17: dict(lo=10, hi=0.01, notch=eeg_notch, gain=0.001), # gripswitch
                         16: dict(lo=249, hi=60, notch=eeg_notch, gain=0.1), # ssep
                         15: dict(lo=eeg_lopass, hi=eeg_hipass, notch=eeg_notch, gain=0.1), # ecg
                       }
