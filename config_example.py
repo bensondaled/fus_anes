@@ -17,7 +17,7 @@ name = 'andy'
 data_path = '/Users/bdd/data/fus_anes/'
 logging_file = '/Users/bdd/data/fus_anes/log.log'
 loading_img_path = '/Users/bdd/code/fus_anes/media/propofol.png'
-post_test_graphics_path = '/Users/bdd/code/fus_anes/post_tests/graphics/'
+arousal_test_graphics_path = '/Users/bdd/code/fus_anes/arousal_tests/graphics/'
 baseline_audio_path = '/Users/bdd/code/fus_anes/media/baseline_audio'
 oddball_audio_path = '/Users/bdd/code/fus_anes/media/oddball_audio/'
 chirp_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp.wav'
@@ -26,8 +26,10 @@ chirp_white_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp_white
 # Verbal instructions
 verbal_instructions_path = '/Users/bdd/data/fus_anes/'
 verbal_instruction_interval = (0.750, 4.5) # secs: (min, max)
-verbal_instruction_command = 'squeeze'
 verbal_instructions_n_prepare = 120
+squeeze_beep_f = 440
+squeeze_beep_dur = 0.150
+squeeze_beep_delay = [150, 800] # ms
 
 # EEG acquisition
 fs = 500 # Hz
@@ -57,6 +59,10 @@ cmap = 'rainbow'
 eeg_baseline_gain = 1
 eeg_gain_zoom_factor = 10000 / eeg_baseline_gain # high: finer
 spect_log = True
+eeg_special_filters = { 17: dict(lo=20, hi=0.1, notch=eeg_notch, gain=0.1), # gripswitch
+                        16: dict(lo=249, hi=60, notch=eeg_notch, gain=0.1), # ssep
+                        15: dict(lo=eeg_lopass, hi=eeg_hipass, notch=eeg_notch, gain=0.1), # ecg
+                      }
 
 # Misc display
 timeline_duration = 20*60 # secs, default time range to show
@@ -70,7 +76,10 @@ fourcc = 'XVID'
 mov_ext = 'avi' # xvid=avi, -1=mp4
 
 # Sound
+audio_backend = 'sounddevice' # sounddevice (mac), ptb (windows)
 audio_in_ch_out_ch = [2, 3] # mic, speaker, use audio_util.probe_audio_devices
+audio_playback_delay = 0.100
+audio_playback_fs = 44100
 audio_stream_chunk = 8192
 audio_save_chunk = audio_stream_chunk * 50
 audio_hdf_resize = audio_save_chunk * 10
@@ -81,7 +90,7 @@ drug = 'propofol'
 pump_port = 'COM8' # Device manager: "Prolific USB-to-Serial..."
 tci_use_prior_session = True
 tci_sim_duration = 8*60 # secs
-tci_minval = 10
+tci_minval = 5
 tci_display_target = (0.5, 2.0)
 syringe_diam = 26.7 #mm, BD 50/60cc syringe
 bolus_rate = 25 # ml/min
