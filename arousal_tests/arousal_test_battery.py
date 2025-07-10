@@ -7,14 +7,15 @@ import csv
 import os
 import json
 import numpy as np
-from datetime import datetime
+from datetime import datetime as dtm
 
 import fus_anes.config as config
 
-data_file = os.path.join(config.data_path, f'{config.subject_id}_post_tests.txt')
-red_path = os.path.join(config.post_test_graphics_path, 'red.jpeg')
-symbol_path = os.path.join(config.post_test_graphics_path, 'symbols')
-num_path = os.path.join(config.post_test_graphics_path, 'nums')
+date_prefix = dtm.now().strftime('%Y-%m-%d')
+data_file = os.path.join(config.data_path, f'{date_prefix}_{config.subject_id}_arousal_tests.txt')
+red_path = os.path.join(config.arousal_test_graphics_path, 'red.jpeg')
+symbol_path = os.path.join(config.arousal_test_graphics_path, 'symbols')
+num_path = os.path.join(config.arousal_test_graphics_path, 'nums')
 
 win = visual.Window(fullscr=True, color='black', units='norm')
 text = visual.TextStim(win, text='', color='white', height=0.07, wrapWidth=1.5)
@@ -25,7 +26,7 @@ move_on = False
 
 def log(task, data):
     with open(data_file, 'a') as f:
-        row = [datetime.now().isoformat(),
+        row = [dtm.now().isoformat(),
                task,
                data]
         row = json.dumps(row)
@@ -59,6 +60,8 @@ min_interval = 2
 max_interval = 10
 max_wait = 2.5
 
+all_keys = [str(i) for i in range(0,10)] + [f'num_{i}' for i in range(0,10)] + ['escape', 'enter', '.', '+', '-', '*', '/', 'backspace', 'space'] + ['num_divide', 'num_multiply', 'num_subtract', 'num_enter', 'num_decimal', 'num_add',]
+
 for trial in range(total_trials):
     red_box.draw()
     win.flip()
@@ -69,11 +72,17 @@ for trial in range(total_trials):
     kb.clock.reset()
     start_delay = random.uniform(min_interval, max_interval)
     while kb.clock.getTime() - start_time < start_delay:
-        keys = kb.getKeys(['space'], waitRelease=True)
+        keys = kb.getKeys(all_keys, waitRelease=True)
         if keys:
             response = keys[0]
             rt = response.rt
+            if response.name == 'escape':
+                move_on = True
+                break
             log('pvt', dict(delay=start_delay, rt=rt, note='early', displayed_rt_ms=''))
+
+    if move_on:
+        break
 
     kb.clearEvents()
     kb.clock.reset()
@@ -88,7 +97,7 @@ for trial in range(total_trials):
         yellow_counter.draw()
         win.flip()
 
-        keys = kb.getKeys(['space', 'escape'], waitRelease=True)
+        keys = kb.getKeys(all_keys, waitRelease=True)
         if keys:
             response = keys[0]
             rt = response.rt
@@ -118,7 +127,7 @@ symbol_names = sorted(os.listdir(symbol_path))
 np.random.shuffle(symbol_names)
 num_names = sorted(os.listdir(num_path))
               
-allowed_responses = [str(i) for i in range(1,10)] + ['escape']
+allowed_responses = [str(i) for i in range(1,10)] + ['escape'] + [f'num_{i}' for i in range(1,10)] 
 key_images = []
 ypos_s = 0.7
 ypos_n = 0.5
