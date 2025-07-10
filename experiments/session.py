@@ -11,6 +11,7 @@ from datetime import datetime as dtm
 
 from fus_anes.hardware import EEG, Pump, Camera, Microphone
 from fus_anes.audio import SqueezeInstructions, BaselineEyes, Oddball, Chirp, end_audio
+from fus_anes.audio.generate_squeeze_instruction_audio import make as make_squeeze_audio
 from fus_anes.util import Saver, multitaper_spectrogram, now, save
 from fus_anes.tci import LiveTCI
 import fus_anes.config as config
@@ -34,12 +35,14 @@ class Session():
         self.saver = Saver(session_id=self.name, data_file=self.data_file, session_obj=self, error_queue=self.error_queue)
         self.tci = LiveTCI(prior_tcm=self.get_prior_tcm(), error_queue=self.error_queue, saver_buffer=self.saver.buffer)
         self.squeeze = None
+        make_squeeze_audio()
         self.baseline_eyes = None
         self.oddball = None
         self.chirp = None
         self.cam = Camera(self.tech_name, error_queue=self.error_queue)
         self.mic = Microphone(self.tech_name, error_queue=self.error_queue)
         self.eeg = EEG(saver_obj_buffer=self.saver.buffer, error_queue=self.error_queue)
+
         trun = now(minimal=True)
         self.running = trun
         self.eeg.start_processing()

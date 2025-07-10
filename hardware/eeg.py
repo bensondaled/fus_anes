@@ -205,7 +205,9 @@ class EEG(tcls):
     def run(self):
         sent_behind_error = False
         try:
-            lfilt = LiveFilter()
+            special_filts = {chan : LiveFilter(**sf, n_channels=1) for chan,sf in config.eeg_special_filters.items()}
+            filt_chans = np.array([i for i in  np.arange(0, config.n_channels-self.n_timefields) if i not in special_filts.keys()])
+            lfilt = LiveFilter(n_channels=len(filt_chans)) # main filter
             while self._on.value:
                 
                 # check if any new data dumped into queue from hardware
@@ -234,7 +236,7 @@ class EEG(tcls):
                 #-- process new data (specifically done after saving buffer, so completely raw data are saved)
 
                 # reference
-                dat[:,:-self.n_timefields] = dat[:,:-self.n_timefields] - dat[:, config.chan_reference][:, None]
+                dat[:,filt_chans] = dat[:,filt_chans] - dat[:, config.chan_reference][:, None]
 
                 # filter
                 if self.new_filter_params_flag.value:
@@ -244,7 +246,9 @@ class EEG(tcls):
                     lfilt.hi = hi
                     lfilt.notch = notch
                     lfilt.refresh_filter()
-                dat[:,:-self.n_timefields] = lfilt(dat[:,:-self.n_timefields]) #TEMP BLOCKED
+                dat[:,filt_chans] = lfilt(dat[:,filt_chans]) # main filt
+                for chan, filt in special_filts.items(): # special filts
+                    dat[:,[chan]] = filt(dat[:,[chan]])
                 
                 # update memory with new data
                 self.memory = np.roll(self.memory,

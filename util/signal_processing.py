@@ -44,12 +44,21 @@ def sliding_window(a, ws, ss=1, pad=True, pos='center', pad_kw=dict(mode='consta
     return strided
             
 class LiveFilter():
-    def __init__(self):
+    def __init__(self,
+                 fs=config.fs,
+                 lo=config.eeg_lopass,
+                 hi=config.eeg_hipass,
+                 notch=config.eeg_notch,
+                 gain=1.0,
+                 n_channels=1,
+                 ):
         
-        self.fs = config.fs
-        self.lo = config.eeg_lopass
-        self.hi = config.eeg_hipass
-        self.notch = config.eeg_notch
+        self.fs = fs
+        self.lo = lo
+        self.hi = hi
+        self.notch = notch
+        self.gain = gain
+        self.n_channels = n_channels
 
         self.zi = None
         self.refresh_filter()
@@ -66,11 +75,11 @@ class LiveFilter():
         self.sos = zpk2sos(Z, P, K)
         if self.zi is None:
             self.zi = sosfilt_zi(self.sos)
-            self.zi = np.repeat(self.zi[:, :, np.newaxis], config.n_channels, axis=2)
+            self.zi = np.repeat(self.zi[:, :, np.newaxis], self.n_channels, axis=2)
 
     def __call__(self, x):
         out, self.zi = sosfilt(self.sos, x, axis=0, zi=self.zi)
-        return out
+        return out * self.gain
 
 def nanpow2db(y):
     if isinstance(y, (int, float)):

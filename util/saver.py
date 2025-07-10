@@ -124,12 +124,12 @@ class Saver(mp.Process):
        
         try:
             with pd.HDFStore(self.data_file, mode='a') as f:
-                print(label, to_write.dtypes)
+                #print(label, to_write.dtypes)
                 f.append(label, to_write,
                               index=False,
                               data_columns=['session','time_stamp'],
                               complevel=0)
-                print(f[label].dtypes)
+                #print(f[label].dtypes)
             field_buffers[label] = []
         except Exception as e:
             self.error_queue.put(f'Saver buffer flush: {str(e)}')

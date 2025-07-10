@@ -46,11 +46,22 @@ class SqueezeInstructions(mproc):
         return path
 
     def play(self):
-        save('squeeze', dict(event='play',onset_ts=np.nan, isi=np.nan), self.saver_buffer)
+        save('squeeze', dict(event='play',onset_ts=np.nan, isi=np.nan, dur_words=np.nan, dur_delay=np.nan), self.saver_buffer)
         self.start()
 
     def run(self):
         idx = 1
+        
+        fs = config.audio_playback_fs
+        beep_t = np.arange(0, int(round(fs * config.squeeze_beep_dur))) / fs
+        beep = np.sin(2 * np.pi * config.squeeze_beep_f * beep_t)
+        envelope = np.ones_like(beep)
+        ramp_samples = int(0.005 * fs)
+        ramp = np.linspace(0, 1, ramp_samples)
+        envelope[:ramp_samples] *= ramp
+        envelope[-ramp_samples:] *= ramp[::-1]
+        beep *= envelope
+
         while not self.kill_flag.value:
             if self.with_nums:
                 clip = self.get_clip(idx)
@@ -60,11 +71,19 @@ class SqueezeInstructions(mproc):
             else:
                 clip = self.get_clip(None)
 
-            data, samplerate = load_audio(clip)
+            data, fs = load_audio(clip)
 
-            playtime = play_tone_precisely(data, samplerate)
+            # add in the beep
+            beep_delay_ms = float(np.random.randint(*config.squeeze_beep_delay))
+            beep_delay = beep_delay_ms / 1000.0
+            delay = np.zeros(int(round(fs * beep_delay)))
+            dur_words = len(data) / fs
+            dur_delay = len(delay) / fs
+            data = np.concatenate([data, delay, beep], axis=0)
+
+            playtime = play_tone_precisely(data, fs)
             isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks
-            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=float(isi_ms)), self.saver_buffer)
+            save('squeeze', dict(event=os.path.split(clip)[-1], onset_ts=playtime, isi=float(isi_ms), dur_words=dur_words, dur_delay=dur_delay), self.saver_buffer)
             if isi_ms > 0:
                 time.sleep(isi_ms / 1000.0)
 
@@ -98,10 +117,10 @@ class BaselineEyes(mproc):
         for path in paths:
             if self.kill_flag.value:
                 break
-            data, samplerate = load_audio(path)
+            data, fs = load_audio(path)
             
             save('bl_eyes', dict(event=os.path.split(path)[-1]), self.saver_buffer)
-            sd.play(data, samplerate)
+            sd.play(data, fs)
             sd.wait()
             for _ in range(int(self.dur)):
                 time.sleep(1)
