@@ -206,7 +206,7 @@ class EEG(tcls):
         sent_behind_error = False
         try:
             special_filts = {chan : LiveFilter(**sf, n_channels=1) for chan,sf in config.eeg_special_filters.items()}
-            filt_chans = np.array([i for i in  np.arange(0, config.n_channels-self.n_timefields) if i not in special_filts.keys()])
+            filt_chans = np.array([i for i in  np.arange(0, config.n_channels) if i not in special_filts.keys()])
             lfilt = LiveFilter(n_channels=len(filt_chans)) # main filter
             while self._on.value:
                 

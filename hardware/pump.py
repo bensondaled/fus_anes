@@ -49,7 +49,7 @@ class Pump():
     
     def infuse(self, rate):
         # rate given in ml/min
-        if rate == 0:
+        if rate < config.pump_rate_min:
             self.command('stp')
         else:
             self.set_flow_rate(rate, 'mL/min')

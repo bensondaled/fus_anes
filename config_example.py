@@ -2,34 +2,36 @@ from fus_anes.constants import *
 
 # Flags
 THREADS_ONLY = False
-TESTING = True
-SIM_DATA = True
+TESTING = False
+SIM_DATA = False
 
 # Subject
-subject_id = 'p005'
-age = 40
-weight = 70.0
-height = 180.0
+subject_id = 'p00x'
+age = 35
+weight = 60.0
+height = 160.0
 sex = 'm'
-name = 'andy'
+name = 'rat'
 
 # Paths
-data_path = '/Users/bdd/data/fus_anes/'
-logging_file = '/Users/bdd/data/fus_anes/log.log'
-loading_img_path = '/Users/bdd/code/fus_anes/media/propofol.png'
-arousal_test_graphics_path = '/Users/bdd/code/fus_anes/arousal_tests/graphics/'
-baseline_audio_path = '/Users/bdd/code/fus_anes/media/baseline_audio'
-oddball_audio_path = '/Users/bdd/code/fus_anes/media/oddball_audio/'
-chirp_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp.wav'
-chirp_white_audio_path = '/Users/bdd/code/fus_anes/media/chirp_audio/chirp_white.wav'
+data_path = f'C:/data_burst/{subject_id}'
+logging_file = 'C:/data_burst/log.log'
+loading_img_path = 'media/propofol.png'
+post_test_graphics_path = 'post_tests/graphics/'
+baseline_audio_path = 'media/baseline_audio'
+oddball_audio_path = 'media/oddball_audio/'
+chirp_audio_path = 'media/chirp_audio/chirp.wav'
+chirp_white_audio_path = 'media/chirp_audio/chirp_white.wav'
 
 # Verbal instructions
-verbal_instructions_path = '/Users/bdd/data/fus_anes/'
+verbal_instructions_path = data_path
+squeeze_path = f'{verbal_instructions_path}/squeeze_audio'
 verbal_instruction_interval = (0.750, 4.5) # secs: (min, max)
 verbal_instructions_n_prepare = 120
 squeeze_beep_f = 440
 squeeze_beep_dur = 0.150
 squeeze_beep_delay = [150, 800] # ms
+use_squeeze_beep = False
 
 # EEG acquisition
 fs = 500 # Hz
@@ -59,8 +61,8 @@ cmap = 'rainbow'
 eeg_baseline_gain = 1
 eeg_gain_zoom_factor = 10000 / eeg_baseline_gain # high: finer
 spect_log = True
-eeg_special_filters = { 17: dict(lo=10, hi=0.01, notch=eeg_notch, gain=0.001), # gripswitch
-                        16: dict(lo=249, hi=60, notch=eeg_notch, gain=0.1), # ssep
+eeg_special_filters = { 17: dict(lo=20, hi=0.1, notch=eeg_notch, gain=0.000005), # gripswitch
+                        16: dict(lo=249, hi=60, notch=eeg_notch, gain=0.001), # ssep
                         15: dict(lo=eeg_lopass, hi=eeg_hipass, notch=eeg_notch, gain=0.1), # ecg
                       }
 
@@ -69,15 +71,15 @@ timeline_duration = 20*60 # secs, default time range to show
 timeline_advance = 2.5*60 # secs, how much to jump in advance when you hit the end of timeline
 
 # Camera
-cam_frame_size = [1080, 1920, 3]
-cam_resize = 1/5
+cam_frame_size = [480, 640, 3]
+cam_resize = 1.0
 cam_file_duration = 10*60 # secs
 fourcc = 'XVID'
 mov_ext = 'avi' # xvid=avi, -1=mp4
 
 # Sound
-audio_backend = 'sounddevice' # sounddevice (mac), ptb (windows)
-audio_in_ch_out_ch = [2, 3] # mic, speaker, use audio_util.probe_audio_devices
+audio_backend = 'ptb'
+audio_in_ch_out_ch = [8, 4] # mic, speaker, use audio_util.probe_audio_devices
 audio_playback_delay = 0.100
 audio_playback_fs = 44100
 audio_stream_chunk = 8192
@@ -87,7 +89,8 @@ n_audio_display = 3.0 # secs
 
 # TCI
 drug = 'propofol'
-pump_port = 'COM8' # Device manager: "Prolific USB-to-Serial..."
+pump_port = 'COM3' # Device manager: "Prolific USB-to-Serial..."
+pump_rate_min = 0.002
 tci_use_prior_session = True
 tci_sim_duration = 8*60 # secs
 tci_minval = 5
@@ -102,9 +105,9 @@ drug_mg_ml = 10.0 # 10mg/ml for propofol
 goto_target_step_size = 15.0
 
 # Oddball
-oddball_deviant_ratio = 0.20
-oddball_isi_ms = [480, 620]
-oddball_n_tones = 300
+oddball_deviant_ratio = 0.23
+oddball_isi_ms = [700, 800]
+oddball_n_tones = 250
 oddball_n_standard_start = 15
 
 # Chirp
