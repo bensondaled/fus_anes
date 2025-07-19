@@ -72,16 +72,16 @@ def implement(t, rates, durs, vals):
 
 implement(t, [0], [10*60], vals)
 
-rates, durs = go_to_target(t, 1.4, duration=4*60, new_target_travel_time=90.0)
+rates, durs = go_to_target(t, 1.0, duration=4*60, new_target_travel_time=90.0)
 implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 1.4, duration=5*60)
+rates, durs = go_to_target(t, 1.0, duration=5*60)
 implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 1.4, duration=2.5*60)
+rates, durs = go_to_target(t, 1.0, duration=2.5*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 2.2, duration=5*60, new_target_travel_time=60.0)
+rates, durs = go_to_target(t, 2.0, duration=5*60, new_target_travel_time=60.0)
 implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 2.2, duration=6*60)
+rates, durs = go_to_target(t, 2.0, duration=6*60)
 implement(t, rates, durs, vals)
 
 rates, durs = go_to_target(t, 3.0, duration=5*60, new_target_travel_time=60.0)
@@ -89,37 +89,49 @@ implement(t, rates, durs, vals)
 rates, durs = go_to_target(t, 3.0, duration=6*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 3.8, duration=5*60, new_target_travel_time=60.0)
+rates, durs = go_to_target(t, 4.0, duration=5*60, new_target_travel_time=60.0)
 implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 3.8, duration=6*60)
-implement(t, rates, durs, vals)
-
-rates, durs = go_to_target(t, 2.6, duration=5*60, new_target_travel_time=60.0)
-implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 2.6, duration=6*60)
+rates, durs = go_to_target(t, 4.0, duration=6*60)
 implement(t, rates, durs, vals)
 
-rates, durs = go_to_target(t, 1.8, duration=5*60, new_target_travel_time=60.0)
+rates, durs = go_to_target(t, 3.5, duration=5*60, new_target_travel_time=60.0)
 implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 1.8, duration=6*60)
-implement(t, rates, durs, vals)
-
-rates, durs = go_to_target(t, 1.0, duration=5*60, new_target_travel_time=60.0)
-implement(t, rates, durs, vals)
-rates, durs = go_to_target(t, 1.0, duration=6*60)
+rates, durs = go_to_target(t, 3.5, duration=6*60)
 implement(t, rates, durs, vals)
 
-implement(t, [0], [40*60], vals)
+rates, durs = go_to_target(t, 2.5, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 2.5, duration=6*60)
+implement(t, rates, durs, vals)
+
+rates, durs = go_to_target(t, 1.5, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 1.5, duration=6*60)
+implement(t, rates, durs, vals)
+
+rates, durs = go_to_target(t, 0.5, duration=5*60, new_target_travel_time=60.0)
+implement(t, rates, durs, vals)
+rates, durs = go_to_target(t, 0.5, duration=6*60)
+implement(t, rates, durs, vals)
+
+implement(t, [0], [45*60], vals)
 
 # pretend now they reached our desired state, so I dynamically say hey hold it here for a while
 #rates, durs = go_to_target(t, t.level, duration=5*60)
 #implement(t, rates, durs, vals)
 
 cp, ce = np.array(vals).T
-pl.figure()
-#pl.plot(np.arange(len(cp))/60, cp, label='cp', color='lightseagreen', ls='--')
-pl.plot(np.arange(len(ce))/60, ce, label='ce', color='lightseagreen', lw=3)
-pl.legend(); pl.grid(True)
+fig, ax = pl.subplots(figsize=(5.5, 3.3),
+                      gridspec_kw=dict(bottom=0.2, top=0.95, right=0.99))
+#ax.plot(np.arange(len(cp))/60, cp, label='cp', color='lightseagreen', ls='--')
+ax.plot((np.arange(len(ce))/60)[::2], ce[::2], label='ce', color='slategrey', lw=6)
+#ax.legend()
+ax.grid(True)
+ax.set_yticks([0,1,2,3,4])
+ax.set_xticks([0, 30, 60, 90, 120])
+ax.tick_params(labelsize=20)
+ax.set_xlabel('Minutes', fontsize=20)
+ax.set_ylabel('[propofol] (mcg/ml)', fontsize=20)
 
 ## Test 4: LiveTCI
 lt = LiveTCI()
