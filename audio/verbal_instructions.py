@@ -28,7 +28,7 @@ class SqueezeInstructions(mproc):
     def __init__(self, with_nums=False, saver_buffer=None):
         super(SqueezeInstructions, self).__init__()
         self.name = config.name.lower()
-        self.audio_path = os.path.join(config.verbal_instructions_path, self.name)
+        self.audio_path = config.squeeze_path
         self.interval = config.verbal_instruction_interval
         self.with_nums = with_nums
         
@@ -61,6 +61,9 @@ class SqueezeInstructions(mproc):
         envelope[:ramp_samples] *= ramp
         envelope[-ramp_samples:] *= ramp[::-1]
         beep *= envelope
+        
+        numberless_clip = self.get_clip(None)
+        numberless_data, numberless_fs = load_audio(numberless_clip)
 
         while not self.kill_flag.value:
             if self.with_nums:
@@ -68,18 +71,22 @@ class SqueezeInstructions(mproc):
                 if clip is None:
                     idx = 1
                     continue
+                data, fs = load_audio(clip)
             else:
-                clip = self.get_clip(None)
+                clip = numberless_clip
+                data, fs = numberless_data, numberless_fs
 
-            data, fs = load_audio(clip)
-
-            # add in the beep
-            beep_delay_ms = float(np.random.randint(*config.squeeze_beep_delay))
-            beep_delay = beep_delay_ms / 1000.0
-            delay = np.zeros(int(round(fs * beep_delay)))
-            dur_words = len(data) / fs
-            dur_delay = len(delay) / fs
-            data = np.concatenate([data, delay, beep], axis=0)
+            if config.use_squeeze_beep:
+                # add in the beep
+                beep_delay_ms = float(np.random.randint(*config.squeeze_beep_delay))
+                beep_delay = beep_delay_ms / 1000.0
+                delay = np.zeros(int(round(fs * beep_delay)))
+                dur_words = len(data) / fs
+                dur_delay = len(delay) / fs
+                data = np.concatenate([data, delay, beep], axis=0)
+            else:
+                dur_words = len(data) / fs
+                dur_delay = -1.0
 
             playtime = play_tone_precisely(data, fs)
             isi_ms = np.random.randint(self.interval[0]*1000, self.interval[1]*1000) # NOTE this ISI is from END of instruction unlike other auditory tasks

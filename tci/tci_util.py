@@ -418,7 +418,7 @@ class LiveTCI(mp.Process):
         if (dose==0 and ce==None) or (dose==None and ce==0):
             return
             
-        save('tci_cmd', dict(kind='bolus', dose=dose, ce_target=ce, dur=None), self.saver_buffer)
+        save('tci_cmd', dict(kind='bolus', dose=dose, ce_target=ce, dur=-1.0), self.saver_buffer)
         
         if clear_queue:
             self.clear_instruction_queue()
@@ -431,22 +431,23 @@ class LiveTCI(mp.Process):
         '''Accepts rate in mcg/kg/min
         '''
 
-        save('tci_cmd', dict(kind='infuse', dose=rate, ce_target=None, dur=dur), self.saver_buffer)
+        save('tci_cmd', dict(kind='infuse', dose=rate, ce_target=-1.0, dur=dur), self.saver_buffer)
 
         if clear_queue:
             self.clear_instruction_queue()
 
         self.user_request_queue.put(('infuse', [rate, dur]))
     
+    @handle_errs
     def goto(self, target, clear_queue=True, **kw):
         if clear_queue:
             self.clear_instruction_queue()
 
-        save('tci_cmd', dict(kind='goto', dose=None, ce_target=target, dur=None), self.saver_buffer)
+        save('tci_cmd', dict(kind='goto', dose=-1.0, ce_target=target, dur=-1.0), self.saver_buffer)
         self.user_request_queue.put(('goto', [target, kw]))
 
     def maintain(self, target, **kw):
-        save('tci_cmd', dict(kind='maintain', dose=None, ce_target=target, dur=None), self.saver_buffer)
+        save('tci_cmd', dict(kind='maintain', dose=-1.0, ce_target=target, dur=-1.0), self.saver_buffer)
         self.user_request_queue.put(('maintain', [target, kw]))
 
     def keep_history(self):

@@ -23,6 +23,7 @@ class Session():
         self.pretty_name = sid.strftime('%Y-%m-%d %H:%M:%S')
         self.tech_name = sid.strftime(f'%Y-%m-%d_%H-%M-%S_subject-{config.subject_id}')
         self.data_filename = f'{self.tech_name}.h5'
+        os.makedirs(config.data_path, exist_ok=True)
         self.data_file = os.path.join(config.data_path, self.data_filename)
 
         self.markers = []
