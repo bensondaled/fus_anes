@@ -14,6 +14,9 @@ from fus_anes.util import now
 import fus_anes.config as config
 
 def save(label, data, buffer, time_data=None, columns=None):
+    if buffer is None:
+        print(f'TAKE NOTE: tried to save into empty buffer. Your calling object (which sent a {label}) probably has no saver_buffer in it. Aborting.')
+        return
     if time_data is None:
         lslstamp, timestamp, perfstamp = now()
     else:

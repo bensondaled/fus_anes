@@ -135,7 +135,7 @@ ax.set_ylabel('[propofol] (mcg/ml)', fontsize=20)
 
 ## Test 4: LiveTCI
 lt = LiveTCI()
-lt.goto(0.4)
+lt.goto(1.0)
 pl.plot(*lt.history)
 pl.plot(*lt.get_projection())
 pl.plot(*lt.simulation(infusion=0))

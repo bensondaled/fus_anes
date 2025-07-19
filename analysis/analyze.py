@@ -213,7 +213,7 @@ for chan in range(0, 12):
 
 ## ----------squeeze
 from fus_anes.constants import MONTAGE
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
     eeg = h.eeg
     sq = h.squeeze
 eeg_time = eeg.index.values
@@ -227,15 +227,15 @@ ax.plot(t,switch)
 sq = sq[sq.event.str.endswith('mp3')]
 for t in sq.onset_ts.values:
     ax.axvline(t-eeg_time[0]+1.4, color='grey') # 1.4 just for clip duration
-ax.set_xlim([37, 63])
-ax.set_ylim([-6077136.377254958, 1815696.37])
+#ax.set_xlim([37, 63])
+#ax.set_ylim([-6077136.377254958, 1815696.37])
 
 
 ## fancy chirp
 import mne
 import pandas as pd
 
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
     eeg = h.eeg
     chirp = h.chirp
 eeg_time = eeg.index.values
@@ -307,7 +307,7 @@ import numpy as np
 import mne
 
 # --- 1. Load your data and events ---
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
     eeg = h.eeg
     ob = h.oddball
 
@@ -362,15 +362,17 @@ evoked_deviant = epochs['deviant'].average()
 fig, ax = pl.subplots(figsize=(8, 5))
 times = evoked_standard.times * 1000  # convert to ms
 
-ax.plot(times, evoked_standard.data[evoked_standard.ch_names.index('Cz')]*1e6, label='Standard')
-ax.plot(times, evoked_deviant.data[evoked_deviant.ch_names.index('Cz')]*1e6, label='Deviant')
-ax.plot(times, (evoked_deviant.data - evoked_standard.data)[evoked_standard.ch_names.index('Cz')]*1e6,
+chtouse = 'Cz'
+#chtouse = 'Pz'
+ax.plot(times, evoked_standard.data[evoked_standard.ch_names.index(chtouse)]*1e6, label='Standard')
+ax.plot(times, evoked_deviant.data[evoked_deviant.ch_names.index(chtouse)]*1e6, label='Deviant')
+ax.plot(times, (evoked_deviant.data - evoked_standard.data)[evoked_standard.ch_names.index(chtouse)]*1e6,
         label='Deviant - Standard', linestyle='--', color='k')
 
 ax.axvline(0, color='grey', linestyle='--')
 ax.set_xlabel('Time (ms)')
 ax.set_ylabel('Amplitude (µV)')
-ax.set_title('Auditory Oddball ERPs at Cz')
+ax.set_title(f'Auditory Oddball ERPs at {chtouse}')
 ax.legend()
 ax.grid(True)
 
@@ -379,8 +381,8 @@ ax.grid(True)
 tmin_pp, tmax_pp = 0.100, 0.300  # in seconds
 evoked_s_crop = evoked_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
 evoked_d_crop = evoked_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-ptp_s_amplitudes = evoked_s_crop.data.ptp(axis=1) * 1e6  # Convert to µV
-ptp_d_amplitudes = evoked_d_crop.data.ptp(axis=1) * 1e6  # Convert to µV
+ptp_s_amplitudes = np.ptp(evoked_s_crop.data, axis=1) * 1e6  # Convert to µV
+ptp_d_amplitudes = np.ptp(evoked_d_crop.data, axis=1) * 1e6  # Convert to µV
 dif = ptp_d_amplitudes - ptp_s_amplitudes
 
 # Plot the topomap of these amplitudes
@@ -395,32 +397,28 @@ import mne
 from fus_anes.constants import MONTAGE
 
 # 1. Load your data and events
-with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-07_18-48-25_subject-p005.h5', 'r') as h:
+fs = 500.0
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
     eeg = h.eeg
     markers = h.markers
 eeg_time = eeg.index.values
 eeg_time = np.linspace(eeg_time[0], eeg_time[-1], len(eeg_time))
 def t2i(t):
     return np.argmin(np.abs(eeg_time-t))
-eeg = eeg.iloc[:, :16].values
-data = eeg[:,:14].T * 1e-6
+eeg = eeg.iloc[:, :len(MONTAGE)].values
+data = eeg.T * 1e-6
 
-fs = 500.0
-channel_names = MONTAGE[:14]
+channel_names = MONTAGE
 montage = mne.channels.make_standard_montage('standard_1020')
 
 # Event onsets in samples (stimulus triggers)
-ssep = eeg[:,14]
+ssep = eeg[:,16]
 ssep = filter_eeg(ssep, fs=fs, lo=fs/2-0.1, hi=60, notch=60)
 # first round
-t0 = markers.iloc[4].t
-t1 = markers.iloc[5].t
-#t0 = markers.iloc[13].t
-#t1 = markers.iloc[14].t
-#t0 = markers.iloc[16].t
-#t1 = markers.iloc[17].t
+t0 = markers[markers.text.str.strip()=='ssep start'].iloc[0].t
+t1 = markers[markers.text.str.strip()=='ssep stop'].iloc[0].t
 
-height = 50
+height = 5000
 i0 = t2i(t0)
 i1 = t2i(t1)
 eeg_time = eeg_time[i0:i1]
@@ -444,10 +442,12 @@ events_samples = onset_idx
 events = np.column_stack((events_samples, np.zeros_like(events_samples), np.ones_like(events_samples))).astype(int)
 
 # 2. Create Raw object
-info = mne.create_info(ch_names=channel_names, sfreq=fs, ch_types='eeg')
-raw = mne.io.RawArray(data, info)
+info = mne.create_info(ch_names=channel_names[:15], sfreq=fs, ch_types='eeg')
+raw = mne.io.RawArray(data[:15], info)
 raw.set_montage(montage)
-raw.set_eeg_reference(['M1', 'M2'])
+#raw.set_eeg_reference(['M1', 'M2'])
+#raw.set_eeg_reference('average')
+raw.set_eeg_reference(['Fz', 'FCz'])
 
 
 # 3. Filter data to typical SSEP band (e.g., 1-100 Hz)
@@ -455,8 +455,8 @@ raw.notch_filter(freqs=60., fir_design='firwin')
 raw.filter(l_freq=1., h_freq=100., fir_design='firwin')
 
 # 4. Re-reference - e.g., linked mastoids or average reference
-raw.set_eeg_reference('average')  # or
-#raw.set_eeg_reference(['M1', 'M2'])  # if mastoids available
+#raw.set_eeg_reference('average')  # or
+raw.set_eeg_reference(['M1', 'M2'])  # if mastoids available
 
 # 5. Epoch data around stim pulse (e.g., -50 ms to +200 ms)
 epochs = mne.Epochs(raw, events, event_id=1,
@@ -472,8 +472,10 @@ fig, ax = pl.subplots(figsize=(8, 5))
 times_ms = evoked.times * 1000
 
 #for ch_name in ['C3', 'C4', 'P7', 'P8', 'F3', 'F4', 'Oz']:
-cols = ['maroon', 'lightgrey']
-for ch_name, col in zip(['C4', 'Oz'], cols):
+#cols = ['maroon', 'slateblue', 'lightgrey', 'grey']
+#for ch_name, col in zip(['C3', 'P7', 'Oz', 'M1'], cols):
+cols = ['slateblue', 'grey']
+for ch_name, col in zip(['P7', 'Oz'], cols):
     ch_idx = evoked.ch_names.index(ch_name)
     ax.plot(times_ms, evoked.data[ch_idx] * 1e6, label=ch_name, color=col, lw=2)
 
@@ -486,15 +488,15 @@ ax.grid(True)
 
 # topo map
 # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-tmin_pp, tmax_pp = 0.020, 0.050  # in seconds
+tmin_pp, tmax_pp = 0.015, 0.030  # in seconds
 #tmin_pp, tmax_pp = 0.050, 0.075  # in seconds
+#tmin_pp, tmax_pp = 0.005, 0.100  # in seconds
 evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-ptp_amplitudes = evoked_crop.data.ptp(axis=1) * 1e6  # Convert to µV
+ptp_amplitudes = np.ptp(evoked_crop.data, axis=1) * 1e6  # Convert to µV
 
 # Plot the topomap of these amplitudes
 fig_topo, ax_topo = pl.subplots(1, 1)
 mne.viz.plot_topomap(ptp_amplitudes, evoked.info, axes=ax_topo,
                      show=True, cmap='Reds', contours=0)
 ax_topo.set_title(f'Peak-to-peak SSEP (µV) {int(tmin_pp*1000)}–{int(tmax_pp*1000)} ms')
-
 ##

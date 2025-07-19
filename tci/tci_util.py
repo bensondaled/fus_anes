@@ -305,6 +305,9 @@ class LiveTCI(mp.Process):
         super(LiveTCI, self).__init__()
 
         self.saver_buffer = saver_buffer
+
+        if error_queue is None:
+            error_queue = mp.Queue()
         self.error_queue = error_queue
 
         self.tci_kw = tci_kw
