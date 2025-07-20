@@ -5,6 +5,7 @@ from psychopy.hardware import keyboard
 import random
 import csv
 import os
+import sys
 import json
 import numpy as np
 from datetime import datetime as dtm
@@ -12,8 +13,18 @@ import time
 
 import fus_anes.config as config
 
+try:
+    subj_id = sys.argv[1]
+except:
+    print('No ID given as argument.')
+    sys.exit(0)
+
+#save_path = config.data_path
+save_path = '/Users/bdd/Desktop/burst_arousal_data'
+os.makedirs(save_path, exist_ok=True)
+
 date_prefix = dtm.now().strftime('%Y-%m-%d')
-data_file = os.path.join(config.data_path, f'{date_prefix}_{config.subject_id}_arousal_tests.txt')
+data_file = os.path.join(save_path, f'{date_prefix}_vigilance_{subj_id}.txt')
 red_path = os.path.join(config.arousal_test_graphics_path, 'red.jpeg')
 symbol_path = os.path.join(config.arousal_test_graphics_path, 'symbols')
 num_path = os.path.join(config.arousal_test_graphics_path, 'nums')
@@ -56,7 +67,7 @@ red_box = visual.ImageStim(win, image=red_path,
                                 units='norm')
 yellow_counter = visual.TextStim(win, text='', color='yellow', height=0.1)
 
-total_trials = 40
+total_trials = 30
 min_interval = 2
 max_interval = 10
 max_wait = 2.5
