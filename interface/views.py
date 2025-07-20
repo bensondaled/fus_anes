@@ -273,6 +273,7 @@ class Interface(qtw.QWidget):
         self.b_set_tci_target = qtw.QPushButton('Goto TCI target')
         self.t_set_tci_target = qtw.QLineEdit('0')
         self.t_set_tci_target.setFixedWidth(60)
+        self.l_tci_inst = qtw.QLabel('--')
         self.b_marker = qtw.QPushButton('Mark')
         self.t_marker = qtw.QLineEdit('')
         self.b_lor = qtw.QPushButton('LOR')
@@ -303,6 +304,7 @@ class Interface(qtw.QWidget):
                               self.b_project, 15,
                               self.b_set_tci_target, 2, self.t_set_tci_target, 5,
                               self.b_clear_tci_queue, 5,
+                              self.l_tci_inst,5,
                               15,
                               ]
 

@@ -88,6 +88,7 @@ class Controller():
         self.eeg_raw_dat = np.zeros([int(round(config.raw_eeg_display_dur * config.fs)), config.n_channels+config.eeg_n_timefields]) * np.nan
         self.eeg_raw_idx = 0
         self.eeg_raw_xvals = np.arange(self.eeg_raw_dat.shape[0]) / config.fs
+        self.next_tci_inst = None
         
         # update functions
         self.timers = {}
@@ -95,6 +96,7 @@ class Controller():
         self.repeat(self.update_eeg_spect,
                     1000 * int(config.spect_update_interval / config.fs))
         self.repeat(self.update_generic, 250) 
+        self.repeat(self.update_tci_inst, 4000) 
         self.repeat(self.update_tci, 1500)
         self.repeat(self.update_timeline, 250)
         self.repeat(self.update_video, 30)
@@ -416,6 +418,12 @@ class Controller():
             for word, obj, but in zip(words, objs, buts):
                 if obj is None and but.running:
                     but.toggle()
+        
+            if self.next_tci_inst is not None:
+                rate, ts = self.next_tci_inst
+                time_until = max(0, ts - now(minimal=True))
+                inst_str = f'Next rate: {rate:0.0f} in {time_until:0.0f}s'
+                self.ui.l_tci_inst.setText(inst_str)
 
         if self.ui.b_sesh.text() == '(Session ending)' and self.session.completed:
             self.session = None
@@ -423,6 +431,15 @@ class Controller():
             self.ui.b_sesh.setText('New session')
             self.ui.splash(False)
             self.ui.setEnabled(True)
+
+    @require_session
+    def update_tci_inst(self):
+        qi = self.session.tci.queued_instructions
+        if len(qi) > 0:
+            self.next_tci_inst = qi[0]
+        else:
+            self.next_tci_inst = None
+            self.ui.l_tci_inst.setText('Next rate: --')
    
     @require_session
     def update_errors(self):

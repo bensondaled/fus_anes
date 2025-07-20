@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 from scipy.optimize import minimize
+import logging
 import multiprocessing as mp
 import threading
 import queue
@@ -63,7 +64,7 @@ def simulate(tci_obj,
         sim_resolution = obj.resolution
 
     if sim_resolution < obj.resolution:
-        print('Adjusting sim resolution to be at least TCI resolution')
+        logging.info('Adjusting sim resolution to be at least TCI resolution')
         sim_resolution = obj.resolution
 
     NUM = (int, float, np.int64, np.int32, np.int16, np.int8, np.float16, np.float32, np.float64)
@@ -549,8 +550,8 @@ class LiveTCI(mp.Process):
 
 
                 elif kind == 'maintain':
-                    print('maintaining')
                     target, kw = params
+                    logging.info(f'Auto-maintaining {target:0.3f}')
 
                     kw['duration'] = kw.pop('duration', self.maintain_time_step)
                     kw['new_target_travel_time'] = kw.pop('new_target_travel_time', config.goto_target_step_size)
@@ -574,7 +575,7 @@ class LiveTCI(mp.Process):
             if is_holding_level is not False:
                 hold_target, hold_end_time = is_holding_level
                 if hold_end_time - now(minimal=True) <= self.hold_keep_ahead_time:
-                    print('sending maintain command')
+                    #print('sending maintain command')
                     self.maintain(hold_target)
 
     def project(self, instructions):
@@ -647,7 +648,7 @@ class LiveTCI(mp.Process):
                 rate, ts = self.instruction_queue.get(block=False)
                 # add anything new from the queue in its proper position in the working instruction list
                 bisect.insort(queued_instructions, (rate, ts), key=lambda inst: inst[1])
-                print(queued_instructions)
+                #print(queued_instructions)
             except queue.Empty:
                 pass
             
@@ -697,7 +698,7 @@ class LiveTCI(mp.Process):
             
 
             rate, ts = queued_instructions.pop(0)
-            print(f'Running instruction: rate={rate}, at time {ts} (delay = {1000*(now(minimal=True)-ts):0.2f}ms)')
+            logging.info(f'Running instruction: rate={rate}, at time {ts} (delay = {1000*(now(minimal=True)-ts):0.2f}ms)')
 
             # handle the pump
             mlmin = mlmin_mcgkgmin(mcgkgmin=rate)

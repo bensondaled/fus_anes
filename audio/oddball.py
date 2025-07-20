@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import logging
 import numpy as np
 import multiprocessing as mp
 
@@ -58,9 +59,8 @@ class Oddball(mproc):
             if n_iters > max_iters:
                 n_iters = 0
                 n_allowed_consecutive += 1
-        print(f'Allowed {n_allowed_consecutive} consecutive oddballs')
+        logging.info(f'Allowed {n_allowed_consecutive} consecutive oddballs')
         sequence = np.append(np.array(['s'] * config.oddball_n_standard_start),  sequence)
-        print(len(sequence))
 
         # --- play
         _isi = -1
@@ -84,7 +84,7 @@ class Oddball(mproc):
                     time.sleep(wait_ms / 1000.0)
             
             playtime = play_tone_precisely(data, fs)
-            print(f'intended isi: {_isi:0.0f}, true gap: {1000.0*(playtime-last_playtime):0.0f}')
+            logging.info(f'intended isi: {_isi:0.0f}, true gap: {1000.0*(playtime-last_playtime):0.0f}')
             save('oddball', dict(event=stim_type, onset_ts=playtime, dummy=dummy), self.saver_buffer)
             
             _isi = np.random.randint(*isi_ms)

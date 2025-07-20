@@ -131,7 +131,7 @@ class Session():
         save('tci_end', dict(tcm=json.dumps(self.tci.export())), self.saver.buffer)
         to_end = [self.eeg, self.saver, self.cam, self.mic, self.tci, self.baseline_eyes, self.squeeze, self.oddball, self.chirp]
         for te in to_end:
-            print(te)
+            logging.info(f'Ending {te}')
             if te is None:
                 continue
             try:
