@@ -390,7 +390,7 @@ class Interface(qtw.QWidget):
                                   pen=dict(width=0.001,),
                                   brush=(255,236,144,120))
         yaxis = pw.getAxis('left')
-        yaxis.setTicks([[(t, f'{t:0.1f}') for t in np.arange(0,3,0.1)]])
+        yaxis.setTicks([[(t, f'{t:0.1f}') for t in np.arange(0,7,0.1)]])
         pw.addItem(lri)
         self.data_objs[f'tci_hist'] = None
         self.data_objs[f'tci_sim'] = None
