@@ -124,9 +124,9 @@ for trial in range(total_trials):
     if move_on:
         break
     log('pvt', dict(delay=start_delay, rt=rt, displayed_rt_ms=ms, note=''))
-    core.wait(0.750)
+    core.wait(0.400)
     win.flip()
-    core.wait(0.750)
+    core.wait(0.250)
 
 
 
