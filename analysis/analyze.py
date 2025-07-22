@@ -1,5 +1,6 @@
 ##
 import pandas as pd
+import mne
 from scipy.signal import butter, iirnotch, tf2zpk, zpk2sos, sosfiltfilt
 from matplotlib.transforms import blended_transform_factory as blend
 from fus_anes.constants import MONTAGE
@@ -19,9 +20,10 @@ def filter_eeg(data, fs, lo=50, hi=0.5, notch=60):
     return out
 
 ## ----------squeeze
-from fus_anes.constants import MONTAGE
 with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
     eeg = h.eeg
+    bl_eyes = h.bl_eyes
+    markers = h.markers
     sq = h.squeeze
 eeg_time = eeg.index.values
 eeg = eeg.iloc[:, :18].values
@@ -36,6 +38,62 @@ for t in sq.onset_ts.values:
     ax.axvline(t-eeg_time[0]+1.4, color='grey') # 1.4 just for clip duration
 #ax.set_xlim([37, 63])
 #ax.set_ylim([-6077136.377254958, 1815696.37])
+
+##
+with pd.HDFStore('/Users/bdd/data/fus_anes/2025-07-18_19-53-18_subject-p00x.h5', 'r') as h:
+    eeg = h.eeg
+    eyes = h.bl_eyes
+eeg_time = eeg.index.values
+start = eeg_time[0]
+eeg = filter_eeg(eeg.values[:,:15], fs=500)
+def t2i(t):
+    return np.argmin(np.abs(t - eeg_time))
+
+open_start = [i-start for i,e in eyes.iterrows() if e.event.startswith('open')]
+closed_start = [i-start for i,e in eyes.iterrows() if e.event.startswith('closed')]
+
+fig, axs = pl.subplots(2,1, sharex=True)
+for ax,dat in zip(axs, eeg.T[[6,8]]):
+    ax.plot(eeg_time-start, dat)
+    for t in open_start:
+        ax.axvline(t, ls=':', color='green')
+    for t in closed_start:
+        ax.axvline(t, ls=':', color='red')
+
+from multitaper import multitaper_spectrogram as mts
+spect, st, sf = mts(eeg, fs=500)
+skeep = (sf <= 40) & (sf>0.5)
+spect = spect[:, skeep, :]
+sf = sf[skeep]
+fig, ax = pl.subplots()
+vmin, vmax = np.percentile(spect, [5,98])
+ax.pcolormesh(st, sf, spect[8], cmap=pl.cm.rainbow,
+              vmin=vmin, vmax=vmax)
+for t in open_start:
+    ax.axvline(t, ls=':', color='green')
+for t in closed_start:
+    ax.axvline(t, ls=':', color='red')
+
+'''
+from mne.time_frequency import tfr_array_multitaper
+eeg_ = eeg.T[None, :, :]
+
+freqs = np.linspace(0.5, 40, 50)
+eeg_ = eeg_[:,:,:100000]
+power = tfr_array_multitaper(eeg_,
+                             sfreq=500,
+                             freqs=freqs,
+                             n_cycles=1,
+                             output='power')[0]
+
+fig, ax = pl.subplots()
+times = np.arange(eeg_.shape[-1]) / 500
+ax.pcolormesh(times,
+              freqs,
+              power[8],
+              cmap=pl.cm.rainbow)
+'''
+
 
 
 ## fancy chirp
