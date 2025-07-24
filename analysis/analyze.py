@@ -227,9 +227,10 @@ level_id = t_to_phase_idx(ob_events_t)
 ob_onset = t2i(ob_events_t)
 
 n_levels = len(np.unique(level_id))
-fig, axs = pl.subplots(1, n_levels, figsize=(15,4),
+fig, axs = pl.subplots(3, 3, figsize=(15,4),
                        sharex=True, sharey=True,
                        gridspec_kw=dict(left=0.05, right=0.98))
+axs = axs.ravel()
 
 summary = []
 for lev,ax in zip(np.unique(level_id), axs):
@@ -275,16 +276,20 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.axvline(0, color='grey', linestyle='--')
     ax.set_xlabel('Time (ms)')
     ax.set_ylabel('Amplitude (µV)')
-    ax.set_title(f'{ch_name} at {lev:0.1f}', fontsize=8)
+    ax.set_title(f'{ch_name} at {phase_levels[lev]:0.1f}', fontsize=8)
     ax.grid(True)
 
     # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.200, 0.300  # in seconds
+    tmin_pp, tmax_pp = 0.100, 0.200  # in seconds
     evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    ptp_s_amplitudes = np.ptp(evoked_s_crop.data, axis=1) * 1e6  # Convert to µV
-    ptp_d_amplitudes = np.ptp(evoked_d_crop.data, axis=1) * 1e6  # Convert to µV
-    dif = ptp_d_amplitudes - ptp_s_amplitudes
+    #ptp_s_amplitudes = np.ptp(evoked_s_crop.data, axis=1) * 1e6  # Convert to µV
+    #ptp_d_amplitudes = np.ptp(evoked_d_crop.data, axis=1) * 1e6  # Convert to µV
+    ch_idx = eeg.ch_names.index('Fz')
+    s_trace = evoked_s_crop.data[ch_idx] * 1e6
+    d_trace = evoked_d_crop.data[ch_idx] * 1e6
+    dif = d_trace - s_trace
+    dif = np.min(dif)
 
     # Plot the topomap of these amplitudes
     #fig_topo, ax_topo = pl.subplots(1, 1)
@@ -339,7 +344,7 @@ for lev,ax in zip(np.unique(level_id), axs):
                         event_id=1,
                         tmin=-0.020,
                         tmax=0.100,
-                        baseline=(-0.010, 0),
+                        baseline=(-0.005, 0.010),
                         preload=True)
     evoked = epochs.average()
     times_ms = evoked.times * 1000
@@ -353,7 +358,7 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.axvline(0, color='k', linestyle='--')
     ax.set_xlabel('Time (ms)')
     ax.set_ylabel('Amplitude (µV)')
-    ax.set_title(f'SSEP at {lev:0.1f}', fontsize=8)
+    ax.set_title(f'SSEP at {phase_levels[lev]:0.1f}', fontsize=8)
     ax.grid(True)
 
     evoked_zero = evoked.copy().crop(tmin=0, tmax=0)
