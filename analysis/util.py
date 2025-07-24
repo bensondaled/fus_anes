@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.signal import butter, iirnotch, tf2zpk, zpk2sos, sosfiltfilt
 from scipy.ndimage import median_filter
 
-from multitaper import multitaper_spectrogram as mts
+from multitaper import multitaper_spectrogram as mts, nanpow2db
 
 def filter_eeg(data, fs, lo=50, hi=0.5, notch=60):
 

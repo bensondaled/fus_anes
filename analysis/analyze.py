@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import mne
 import os
-from util import mts, filter_eeg, detect_switch
+import json
+from util import mts, filter_eeg, detect_switch, nanpow2db
 from fus_anes.constants import MONTAGE
 
 from threshs import switch_thresh, ssep_thresh
@@ -100,31 +101,45 @@ for t in sq_onset:
     ax.axvline(t-eeg_time[0], color='grey')
 ax.axvline(t-eeg_time[0], color='grey', label='Squeeze command')
 
-flip = detect_switch(np.abs(switch), switch_thresh[name])
-for idx in flip:
+press_idx = detect_switch(np.abs(switch), switch_thresh[name])
+squeeze_times = np.array([eeg_time[i] for i in press_idx])
+for idx in press_idx:
     ax.axvline(time[idx], color='pink')
 ax.axvline(time[idx], color='pink', label='Detected squeeze')
 
 ax.legend()
 
-# analyze response time
-max_lag = 1.0 # secs
-squeeze_times = np.array([eeg_time[idx] for idx in flip])
-rts = []
-for cmd_idx, cmd_t in enumerate(sq_onset):
-    candidates = squeeze_times[squeeze_times > cmd_t]
-    candidates = candidates[candidates - cmd_t <= max_lag]
-    if cmd_idx < len(sq_onset)-1: # there was no next command in that time
-        candidates = candidates[candidates <= sq_onset[cmd_idx+1]]
-    rt = candidates[0] - cmd_t if len(candidates) else np.nan
-    rts.append(float(rt) * 1000)
-rts = np.array(rts)
-pct_resp = 100.0 * np.mean(~np.isnan(rts))
+level_id = t_to_phase_idx(sq_onset)
+fig, axs = pl.subplots(1, len(np.unique(level_id)))
+summary = []
+for lev, ax in zip(np.unique(level_id), axs):
+    max_lag = 1.0 # secs
+    rts = []
+    sq_lev = sq_onset[level_id == lev]
+    for cmd_idx, cmd_t in enumerate(sq_lev):
+        candidates = squeeze_times[squeeze_times > cmd_t]
+        candidates = candidates[candidates - cmd_t <= max_lag]
+        if cmd_idx < len(sq_lev)-1: # there was no next command in that time
+            candidates = candidates[candidates <= sq_lev[cmd_idx+1]]
+        rt = candidates[0] - cmd_t if len(candidates) else np.nan
+        rts.append(float(rt) * 1000)
+    rts = np.array(rts)
+    pct_resp = 100.0 * np.mean(~np.isnan(rts))
 
-fig, ax = pl.subplots()
-ax.hist(rts[~np.isnan(rts)], bins=15, color='grey')
-ax.set_title(f'% responses: {pct_resp:0.0f}%')
-ax.set_xlabel('RT (ms)')
+    ax.hist(rts[~np.isnan(rts)], bins=15, color='grey')
+    ax.set_title(f'% resp: {pct_resp:0.0f}%, lev {phase_levels[lev]:0.2f}', fontsize=8)
+    ax.set_xlabel('RT (ms)')
+
+    summary.append([phase_levels[lev], np.nanmean(rts), pct_resp])
+
+summary = np.array(summary)
+fig, axs = pl.subplots(1, 2)
+axs[0].scatter(summary[:,0], summary[:,1], color='grey', s=150, marker='o') # rt
+axs[1].scatter(summary[:,0], summary[:,2], color='grey', s=150, marker='o') # % resp
+axs[0].set_xlabel('Propofol level')
+axs[1].set_xlabel('Propofol level')
+axs[0].set_ylabel('RT')
+axs[1].set_ylabel('% response')
 
 ## Spectrogram
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
@@ -133,13 +148,16 @@ e_f = eeg._data[frontal]
 e_p = eeg._data[posterior]
 sp_frontal, sp_t, sp_f = mts(e_f.T, fs=fs, window_size=10.0, window_step=10.0)
 sp_posterior, sp_t, sp_f  = mts(e_p.T, fs=fs, window_size=10.0, window_step=10.0)
+def spect_t2i(t):
+    return np.argmin(np.abs(t - sp_t))
 f_keep = sp_f < 40
 sp_f = sp_f[f_keep]
+sp_frontal = sp_frontal[:, f_keep, :]
+sp_posterior = sp_posterior[:, f_keep, :]
 
 fig, axs = pl.subplots(2, 1, sharex=True)
 for ax, sp in zip(axs, [sp_frontal, sp_posterior]):
     sp = np.median(sp, axis=0)
-    sp = sp[f_keep]
 
     vmin, vmax = np.percentile(sp, [1, 95])
     ax.pcolormesh(sp_t, sp_f, sp,
@@ -152,6 +170,23 @@ for ps, plev in zip(phase_starts, phase_levels):
     ax.text(ps-eeg_time[0], 42, f'to {plev:0.1f}', clip_on=False,
             ha='center', va='center')
 
+summary = []
+alpha = (sp_f>=8) & (sp_f<14)
+pss = np.append(phase_starts, 1e15)
+for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
+    i0 = spect_t2i(t0-eeg_time[0])
+    i1 = spect_t2i(t1-eeg_time[0])
+    chunk = sp_frontal[:, :, i0:i1]
+    chunk = chunk[:, alpha, :]
+    #chunk = nanpow2db(chunk)
+    mean = np.nanmedian(chunk) * 1e6
+    summary.append([lev, mean])
+summary = np.array(summary)
+
+fig, ax = pl.subplots()
+ax.scatter(*summary.T, color='grey', s=150, marker='o')
+ax.set_xlabel('Propofol level')
+ax.set_ylabel('Alpha power')
 
 ## Chirp
 eeg.set_eeg_reference('average')
@@ -364,17 +399,16 @@ for lev,ax in zip(np.unique(level_id), axs):
     evoked_zero = evoked.copy().crop(tmin=0, tmax=0)
     tmin_pp, tmax_pp = 0.005, 0.100  # in seconds
     evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    ch_idx = evoked.ch_names.index('C3')
-    trace = evoked_crop.data[ch_idx] * 1e6
-    zero = evoked_zero.data[ch_idx].squeeze() * 1e6
+    trace = evoked_crop.data * 1e6
+    zero = evoked_zero.data.squeeze() * 1e6
     amplitude = np.abs(np.min(trace) - zero)
-    latency = np.argmin(trace)
+    latency = np.argmin(trace, axis=1)
+    ch_idx = evoked.ch_names.index('C3')
 
-    summary.append([phase_levels[lev], amplitude, latency])
+    summary.append([phase_levels[lev], amplitude[ch_idx], latency[ch_idx]])
 
     # Plot the topomap of these amplitudes
-    #fig_topo, ax_topo = pl.subplots(1, 1)
-    #mne.viz.plot_topomap(ptp_amplitudes, evoked.info, axes=ax_topo,
+    #mne.viz.plot_topomap(amplitude, evoked.info, axes=ax,
     #                     show=True, cmap='Reds', contours=0)
     #ax_topo.set_title(f'Peak-to-peak SSEP (µV) {int(tmin_pp*1000)}–{int(tmax_pp*1000)} ms')
 
@@ -389,4 +423,9 @@ axs[1].set_xlabel('Propofol level')
 axs[0].set_ylabel('Amplitude')
 axs[1].set_ylabel('Latency')
 
+## Vigilance
+data_file = '/Users/bdd/data/fus_anes/2025-07-24_vigilance_b003.txt'
+with open(data_file, 'r') as f:
+    vdata = f.readlines()
+vdata = [json.loads(l) for l in vdata]
 ##
