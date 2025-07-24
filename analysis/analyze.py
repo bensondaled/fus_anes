@@ -12,7 +12,6 @@ from threshs import switch_thresh, ssep_thresh
 ## Params
 session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
-is_TUS = False
 
 ## Load
 with pd.HDFStore(session_path, 'r') as h:
@@ -22,7 +21,10 @@ with pd.HDFStore(session_path, 'r') as h:
     squeeze = h.squeeze
     oddball = h.oddball
     chirp = h.chirp
-    tci_cmd = h.tci_cmd
+    if 'tci_cmd' in h:
+        tci_cmd = h.tci_cmd
+    else:
+        tci_cmd = None
     print(h.keys())
 
 true_eeg_time = eeg.index.values
@@ -45,17 +47,23 @@ eeg *= 1e-6
 eeg_raw = eeg
 
 ## Label propofol levels
-goto = tci_cmd[tci_cmd.kind == 'goto']
-target = goto.ce_target
+if tci_cmd is not None:
+    goto = tci_cmd[tci_cmd.kind == 'goto']
+    _p_target = goto.ce_target
+else:
+    # for ultrasound sessions, mock label as prop 0 vs 1 for pre-post respectively
+    us = markers[markers.text.str.contains('ultrasound')].t.iloc[0]
+    _p_target = pd.Series([1], index=[us])
+
 def t_to_phase_idx(t):
     if isinstance(t, (list, np.ndarray)):
         return np.array([t_to_phase_idx(x) for x in t])
     else:
-        edges = target.index.values
+        edges = _p_target.index.values
         return np.searchsorted(edges, t)
 
-phase_starts = np.append(eeg_time[0], target.index.values)
-phase_levels = np.append(0, target.values)
+phase_starts = np.append(eeg_time[0], _p_target.index.values)
+phase_levels = np.append(0, _p_target.values)
 
 def t_to_phase_level(t):
     if isinstance(t, (list, np.ndarray)):
@@ -72,11 +80,9 @@ info = mne.create_info(ch_names=channel_names,
 eeg = mne.io.RawArray(eeg_raw.T, info)
 eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
 
-if is_TUS:
-    eeg = eeg.drop_channels(['Oz', 'Fz']) # for TUS sessions
-
 # filter
-eeg.notch_filter(freqs=60.0, fir_design='firwin')
+#eeg.notch_filter(freqs=60.0, fir_design='firwin')
+eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit')
 eeg.filter(l_freq=1., h_freq=50., fir_design='firwin')
 
 # reference
@@ -142,6 +148,7 @@ axs[0].set_ylabel('RT')
 axs[1].set_ylabel('% response')
 
 ## Spectrogram
+eeg.set_eeg_reference('average')
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
 e_f = eeg._data[frontal]
@@ -159,7 +166,7 @@ fig, axs = pl.subplots(2, 1, sharex=True)
 for ax, sp in zip(axs, [sp_frontal, sp_posterior]):
     sp = np.median(sp, axis=0)
 
-    vmin, vmax = np.percentile(sp, [1, 95])
+    vmin, vmax = np.percentile(sp, [1, 90])
     ax.pcolormesh(sp_t, sp_f, sp,
                  vmin=vmin, vmax=vmax,
                  cmap=pl.cm.rainbow)
@@ -189,6 +196,8 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Alpha power')
 
 ## Chirp
+chirp_ch_name = 'F3' # Cz, Fz, F3
+chirp_ch_idx = channel_names.index(chirp_ch_name) 
 eeg.set_eeg_reference('average')
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
@@ -233,9 +242,13 @@ for eid, ax in zip(eids, axs):
     #           mode='logratio',
     #           title='Evoked power')
 
-    itc.plot(picks='Fz',
+    #itc.plot(picks='Cz',
+    #         axes=ax,
+    #         colorbar=True)
+
+    itc.plot(picks=chirp_ch_name, # Cz and/or Fz
              axes=ax,
-             vlim=(0.0, 0.8),
+             vlim=(0.0, 0.4), # 0.8
              cnorm=None,
              colorbar=False)
     ax.set_title(f'{eid}', fontsize=9)
@@ -243,7 +256,7 @@ for eid, ax in zip(eids, axs):
         ax.set_ylabel('')
 
     itc_data = itc.copy().crop(tmin=0.0, tmax=0.5).data  # shape: (n_channels, n_freqs, n_times)
-    mean_itc = itc_data[0].mean(axis=1)  # average over time, channel 0
+    mean_itc = itc_data[chirp_ch_idx].mean(axis=1)  # average over time, channel 0
     summary.append([float(eid), mean_itc])
 
 fig, ax = pl.subplots()
@@ -295,7 +308,7 @@ for lev,ax in zip(np.unique(level_id), axs):
 
     times = mean_standard.times * 1000
 
-    ch_name = 'Fz'
+    ch_name = 'Cz'
     ch_idx = mean_standard.ch_names.index(ch_name)
     std = mean_standard.data[ch_idx] * 1e6
     std_err = err_standard.data[ch_idx] * 1e6
@@ -345,18 +358,37 @@ ax.set_ylabel('Mean oddball mmn')
 #eeg.set_eeg_reference(['M1', 'M2'])
 eeg.set_eeg_reference('average')
 
-ssep = filter_eeg(eeg_raw[:,[channel_names.index('ssep')]],
-                    fs=fs,
-                    lo=fs/2-0.1,
-                    hi=60,
-                    notch=60)[:,0]
+eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit', picks=['ssep'])
+eeg.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
+ssep_channel = channel_names.index('ssep')
+ssep = eeg._data[ssep_channel]
+
+#ssep = filter_eeg(eeg_raw[:,[channel_names.index('ssep')]],
+#                    fs=fs,
+#                    lo=fs/2-0.1,
+#                    hi=60,
+#                    notch=60)[:,0]
 
 fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
 time = eeg_time - eeg_time[0]
 ax.plot(time, ssep, color='k')
 
-onset_idx = detect_switch(ssep, ssep_thresh[name], min_duration=1)
+onset_idx = detect_switch(np.abs(ssep), ssep_thresh[name], min_duration=1)
 onset_t = np.array([eeg_time[i] for i in onset_idx])
+
+# filter to include only those inside manually marked bounds of ssep testing made during session
+bounds = markers[markers.text.str.startswith('ssep')]
+bs = bounds.text.str.strip().str.replace('ssep ','').values
+assert np.all(bs[0::2] == 'start')
+assert np.all(bs[1::2] == 'stop')
+bounds = np.array(list(zip(bounds.t.values[0::2], bounds.t.values[1::2])))
+keep = np.array([np.any([((t>=b0) & (t<=b1)) for b0,b1 in bounds]) for t in onset_t])
+onset_t = onset_t[keep]
+onset_idx = onset_idx[keep]
+
+inferred_ssep_rate = 1/np.median(np.diff(onset_t))
+print(f'Inferred rate of {inferred_ssep_rate:0.1f} Hz - if far from 7, inspect.')
+
 for idx in onset_idx:
     ax.axvline(time[idx], color='pink')
 ax.axvline(time[idx], color='pink', label='Detected SSEP pulse')
@@ -428,4 +460,40 @@ data_file = '/Users/bdd/data/fus_anes/2025-07-24_vigilance_b003.txt'
 with open(data_file, 'r') as f:
     vdata = f.readlines()
 vdata = [json.loads(l) for l in vdata]
+
+dt = [dt for dt,task,dat in vdata]
+dat = [dat for dt,task,dat in vdata]
+task = [task for dt,task,dat in vdata]
+vdata = pd.DataFrame(dat)
+vdata['ts'] = dt
+vdata['task'] = task
+
+def drop_leading_repeats(df, column):
+    first_value = df[column].iloc[0]
+    change_index = (df[column] != first_value).idxmax()
+    if df[column].nunique() == 1:
+        return df.iloc[0:0]  # empty DataFrame
+    return df.iloc[change_index:].reset_index(drop=True)
+vdata = drop_leading_repeats(vdata, 'task') # drop leading pvt
+vdata = drop_leading_repeats(vdata, 'task') # drop leading dsst
+
+pvt = vdata[vdata.task == 'pvt']
+dsst = vdata[vdata.task == 'dsst']
+
+# pvt
+rt = pvt[~(pvt.note == 'early')].rt.values
+rt *= 1000
+fig, ax = pl.subplots()
+ax.hist(rt, color='grey', bins=25)
+ax.set_xlabel('RT (ms)')
+# TODO analyze early presses
+
+# dsst
+dsst = dsst[~dsst.target.isna()]
+target = dsst.target.str.replace('.jpeg','').values
+choice = dsst.key.str.replace('num_','').values
+print(f'{np.mean(choice == target):0.2f} correct')
+print(f'{len(choice)} completed')
+
+# TODO: separate by pre/post (in future will be labeled with start token) 
 ##
