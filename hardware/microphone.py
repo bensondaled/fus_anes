@@ -99,6 +99,8 @@ class Microphone(mproc):
             self._saving.value = 1
             self._on.value = 1
             finished = False
+            
+            warned_mic = 0
 
             while True:
                 try:
@@ -111,8 +113,13 @@ class Microphone(mproc):
                     self.n_frames_queued_a.value += len(aud)
 
                     if self.n_frames_captured_a.value - self.n_frames_saved_a.value > self.save_audio_buffer_shape * 3:
-                        logging.warning(f'Falling behind on audio saving:\nCaptrd\t{self.n_frames_captured_a.value}\nQueued\t{self.n_frames_queued_a.value}\nSaved\t{self.n_frames_saved_a.value}\nDelta\t{self.n_frames_captured_a.value-self.n_frames_saved_a.value}\n')
-
+                        if warned_mic == 3:
+                            logging.warning('Warnings from mic continue, will spare the ongoing alerts.')
+                        elif warned_mic > 3:
+                            pass
+                        else:
+                            logging.warning(f'Falling behind on mic saving:\nCaptrd\t{self.n_frames_captured_a.value}\nQueued\t{self.n_frames_queued_a.value}\nSaved\t{self.n_frames_saved_a.value}\nDelta\t{self.n_frames_captured_a.value-self.n_frames_saved_a.value}\n')
+                            warned_mic += 1
                     if n_dumped_audio == config.audio_save_chunk:
                         self.empty_save_buffer()
                         n_dumped_audio = 0
