@@ -10,7 +10,7 @@ from fus_anes.constants import MONTAGE
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 
 ## Load
@@ -45,6 +45,12 @@ channel_names = MONTAGE
 eeg = eeg.values[:, :len(channel_names)]
 eeg *= 1e-6
 eeg_raw = eeg
+
+def ch_name_to_idx(name):
+    if isinstance(name, (str,)):
+        return channel_names.index(name) 
+    elif isinstance(name, (list, np.ndarray)):
+        return [ch_name_to_idx(n) for n in name]
 
 ## Label propofol levels
 if tci_cmd is not None:
@@ -196,9 +202,10 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Alpha power')
 
 ## Chirp
-chirp_ch_name = 'F3' # Cz, Fz, F3
-chirp_ch_idx = channel_names.index(chirp_ch_name) 
-eeg.set_eeg_reference('average')
+chirp_ch_name = ['Fz', 'Cz', 'FCz', 'F3', 'F4',]  # always use a list even if just one
+chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
+#eeg.set_eeg_reference('average')
+eeg.set_eeg_reference(['M1','M2'])
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
 level_id = t_to_phase_idx(chirp_onset_t)
@@ -237,26 +244,35 @@ for eid, ax in zip(eids, axs):
                                         decim=2,
                                         )
 
-    #power.plot(picks='Fz',
-    #           baseline=(-0.1, 0),
+    #power.plot(picks=chirp_ch_name,
+    #          baseline=(-0.1, 0),
     #           mode='logratio',
-    #           title='Evoked power')
+    #           title='Evoked power',
+    #           axes=ax)
+    #itc.plot(axes=ax,
+    #         baseline=(-0.100, 0),
+    #         mode='mean',
+    #         vlim=(0.0, 0.3), # 0.8
+    #         cnorm=None,
+    #         colorbar=False)
 
-    #itc.plot(picks='Cz',
-    #         axes=ax,
-    #         colorbar=True)
-
-    itc.plot(picks=chirp_ch_name, # Cz and/or Fz
-             axes=ax,
-             vlim=(0.0, 0.4), # 0.8
-             cnorm=None,
-             colorbar=False)
+    mean_itc = np.mean(np.abs(itc.data[chirp_ch_idx, :, :]), axis=0) 
+    ax.imshow(mean_itc,
+              aspect='auto',
+              origin='lower',
+              vmin=0.0,
+              vmax=0.6,
+              extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
+              cmap='rainbow')
+    
+    ax.set_xlabel('Seconds')
+    ax.set_ylabel('Freq (Hz)')
     ax.set_title(f'{eid}', fontsize=9)
     if ax is not axs[0]:
         ax.set_ylabel('')
 
     itc_data = itc.copy().crop(tmin=0.0, tmax=0.5).data  # shape: (n_channels, n_freqs, n_times)
-    mean_itc = itc_data[chirp_ch_idx].mean(axis=1)  # average over time, channel 0
+    mean_itc = itc_data[chirp_ch_idx].mean(axis=0).mean(axis=1)  # average over time
     summary.append([float(eid), mean_itc])
 
 fig, ax = pl.subplots()
@@ -266,6 +282,8 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
+ch_name = ['Fz',] #['FCz', 'Fz', 'Cz'] # always list
+ch_idx = ch_name_to_idx(ch_name)
 #eeg.set_eeg_reference(['M1','M2'])
 eeg.set_eeg_reference('average')
 
@@ -294,9 +312,9 @@ for lev,ax in zip(np.unique(level_id), axs):
     epochs = mne.Epochs(eeg,
                         events,
                         event_id=event_id,
-                        tmin=-0.2,
-                        tmax=0.8,
-                        baseline=(-0.2, 0),
+                        tmin=-0.100,
+                        tmax=0.500,
+                        baseline=(-0.100, 0),
                         detrend=1,
                         preload=True)
     epochs = epochs.pick('eeg')
@@ -308,12 +326,10 @@ for lev,ax in zip(np.unique(level_id), axs):
 
     times = mean_standard.times * 1000
 
-    ch_name = 'Cz'
-    ch_idx = mean_standard.ch_names.index(ch_name)
-    std = mean_standard.data[ch_idx] * 1e6
-    std_err = err_standard.data[ch_idx] * 1e6
-    dev = mean_deviant.data[ch_idx] * 1e6
-    dev_err = err_deviant.data[ch_idx] * 1e6
+    std = mean_standard.data[ch_idx].mean(axis=0) * 1e6
+    std_err = err_standard.data[ch_idx].mean(axis=0) * 1e6
+    dev = mean_deviant.data[ch_idx].mean(axis=0) * 1e6
+    dev_err = err_deviant.data[ch_idx].mean(axis=0) * 1e6
     dif = dev - std
     ax.plot(times, std, label='Standard', color='k')
     ax.fill_between(times, std-std_err, std+std_err, alpha=0.5, lw=0, color='k')
@@ -328,35 +344,41 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.100, 0.200  # in seconds
+    tmin_pp, tmax_pp = 0.00, 0.250  # in seconds
     evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     #ptp_s_amplitudes = np.ptp(evoked_s_crop.data, axis=1) * 1e6  # Convert to µV
     #ptp_d_amplitudes = np.ptp(evoked_d_crop.data, axis=1) * 1e6  # Convert to µV
-    ch_idx = eeg.ch_names.index('Fz')
-    s_trace = evoked_s_crop.data[ch_idx] * 1e6
-    d_trace = evoked_d_crop.data[ch_idx] * 1e6
-    dif = d_trace - s_trace
-    dif = np.min(dif)
+    s_trace = evoked_s_crop.data[ch_idx].mean(axis=0) * 1e6
+    d_trace = evoked_d_crop.data[ch_idx].mean(axis=0) * 1e6
+    dif_trace = d_trace - s_trace
+    dif = np.min(dif_trace)
+    latency = np.argmin(dif_trace)
 
     # Plot the topomap of these amplitudes
     #fig_topo, ax_topo = pl.subplots(1, 1)
     #mne.viz.plot_topomap(ptp_d_amplitudes, mean_deviant.info, axes=ax_topo,
     #                     show=True, cmap='Reds', contours=0)
 
-    summary.append([phase_levels[lev], dif])
+    summary.append([phase_levels[lev], dif, latency])
 ax.legend()
 
-fig, ax = pl.subplots()
-summ = np.array([(xval, np.min(yval)) for xval, yval in summary])
-ax.scatter(*summ.T, color='grey', s=150, marker='o')
+summ = np.array(summary)
+fig, axs = pl.subplots(1, 2)
+ax = axs[0]
+ax.scatter(summ[:,0], summ[:,1], color='grey', s=150, marker='o')
 ax.set_xlabel('Propofol level')
-ax.set_ylabel('Mean oddball mmn')
+ax.set_ylabel('Mean oddball mmn ampl')
+ax = axs[1]
+ax.scatter(summ[:,0], summ[:,2], color='grey', s=150, marker='o')
+ax.set_xlabel('Propofol level')
+ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
 #eeg.set_eeg_reference(['M1', 'M2'])
-eeg.set_eeg_reference('average')
+#eeg.set_eeg_reference('average')
+eeg.set_eeg_reference(['Fz', 'FCz', 'Cz'])
 
 eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit', picks=['ssep'])
 eeg.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
@@ -429,11 +451,13 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     evoked_zero = evoked.copy().crop(tmin=0, tmax=0)
-    tmin_pp, tmax_pp = 0.005, 0.100  # in seconds
+    tmin_pp, tmax_pp = 0.00, 0.060  # in seconds
     evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     trace = evoked_crop.data * 1e6
     zero = evoked_zero.data.squeeze() * 1e6
-    amplitude = np.abs(np.min(trace) - zero)
+    #amplitude = np.abs(np.min(trace) - zero)
+    amplitude = np.ptp(np.abs(trace), axis=1)
+    #latency = np.argmax(np.abs(trace), axis=1)
     latency = np.argmin(trace, axis=1)
     ch_idx = evoked.ch_names.index('C3')
 
