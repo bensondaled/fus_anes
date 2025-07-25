@@ -51,6 +51,8 @@ def show_msg(message, wait_keys=['space']):
     win.flip()
     event.waitKeys(keyList=wait_keys)
 
+log('start', {})
+
 
 # === Psychomotor Vigilance Task (Visual) ===
 '''analysis plan:
