@@ -41,6 +41,8 @@ class Controller():
         self.ui.b_run_oddball.clicked.connect(self.toggle_oddball)
         self.ui.b_run_chirp.clicked.connect(self.toggle_chirp)
         self.ui.b_run_ssep.clicked.connect(self.run_ssep)
+        self.ui.b_run_steady.clicked.connect(self.run_steady)
+        self.ui.b_run_vigilance.clicked.connect(self.run_vigilance)
         self.ui.b_bolus.clicked.connect(self.bolus)
         self.ui.b_infusion.clicked.connect(self.infuse)
         self.ui.b_project.clicked.connect(self.project)
@@ -366,6 +368,20 @@ class Controller():
             self.session.add_marker([now(minimal=True), 'ssep stop'])
         else:
             self.session.add_marker([now(minimal=True), 'ssep start'])
+    
+    @require_session
+    def run_steady(self, event):
+        if not self.ui.b_run_steady.running:
+            self.session.add_marker([now(minimal=True), 'steady stop'])
+        else:
+            self.session.add_marker([now(minimal=True), 'steady start'])
+    
+    @require_session
+    def run_vigilance(self, event):
+        if not self.ui.b_run_vigilance.running:
+            self.session.add_marker([now(minimal=True), 'vigilance stop'])
+        else:
+            self.session.add_marker([now(minimal=True), 'vigilance start'])
     
     @require_session
     def update_filters(self):

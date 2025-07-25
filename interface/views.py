@@ -256,6 +256,8 @@ class Interface(qtw.QWidget):
         self.b_sesh = qtw.QPushButton('Session')
         self.l_sesh = qtw.QLabel('(no session)')
         self.b_run_baseline = StopwatchButton('Baseline')
+        self.b_run_steady = StopwatchButton('Steady')
+        self.b_run_vigilance = StopwatchButton('Vigilance')
         self.b_run_squeeze = StopwatchButton('Squeeze')
         self.b_run_oddball = StopwatchButton('Oddball')
         self.b_run_chirp = StopwatchButton('Chirp')
@@ -293,10 +295,12 @@ class Interface(qtw.QWidget):
                               ]
         row1_toolbar_items = [5,
                               self.b_run_baseline, 5,
+                              self.b_run_steady, 5,
                               self.b_run_squeeze, 5,
+                              self.b_run_ssep, 5,
                               self.b_run_oddball, 5,
                               self.b_run_chirp, 5,
-                              self.b_run_ssep,
+                              self.b_run_vigilance, 5,
                               20,
                               self.b_bolus, 2, self.t_bolus, 2,
                               self.b_infusion, 2, self.t_infusion, 2, self.l_infusion_rate, 5,
