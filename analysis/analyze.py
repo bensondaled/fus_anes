@@ -11,6 +11,7 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 
 ## Load
@@ -71,6 +72,10 @@ def t_to_phase_idx(t):
 phase_starts = np.append(eeg_time[0], _p_target.index.values)
 phase_levels = np.append(0, _p_target.values)
 
+prop_rising = np.arange(len(phase_levels)) <= np.argmax(phase_levels)
+prop_falling = np.arange(len(phase_levels)) > np.argmax(phase_levels)
+prop_direction = prop_rising - prop_falling.astype(int)
+
 def t_to_phase_level(t):
     if isinstance(t, (list, np.ndarray)):
         return np.array([t_to_phase_level(x) for x in t])
@@ -83,17 +88,17 @@ ch_types = [{'ssep':'stim', 'gripswitch':'stim', 'ecg':'ecg'}.get(c, 'eeg') for 
 info = mne.create_info(ch_names=channel_names,
                        sfreq=fs,
                        ch_types=ch_types)
-eeg = mne.io.RawArray(eeg_raw.T, info)
+eeg = mne.io.RawArray(eeg_raw.T.copy(), info)
 eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
 
 # filter
 #eeg.notch_filter(freqs=60.0, fir_design='firwin')
 eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit')
-eeg.filter(l_freq=1., h_freq=50., fir_design='firwin')
+eeg.filter(l_freq=0.1, h_freq=59.5, fir_design='firwin')
 
 # reference
-#eeg.set_eeg_reference('average')
-eeg.set_eeg_reference(['M1','M2'])
+eeg.set_eeg_reference('average')
+#eeg.set_eeg_reference(['M1','M2'])
 
 ## ---- Analyses
 
@@ -184,28 +189,39 @@ for ps, plev in zip(phase_starts, phase_levels):
             ha='center', va='center')
 
 summary = []
-alpha = (sp_f>=8) & (sp_f<14)
+alpha = (sp_f>=8) & (sp_f<15)
+delta = (sp_f>=0.5) & (sp_f<4)
 pss = np.append(phase_starts, 1e15)
 for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
     chunk = sp_frontal[:, :, i0:i1]
-    chunk = chunk[:, alpha, :]
+    chunk *= 1e6
     #chunk = nanpow2db(chunk)
-    mean = np.nanmedian(chunk) * 1e6
-    summary.append([lev, mean])
+
+    chunk_a = chunk[:, alpha, :]
+    chunk_d = chunk[:, delta, :]
+    mean_a = np.nanmedian(chunk_a)
+    mean_d = np.nanmedian(chunk_d)
+    summary.append([lev, mean_a, mean_d])
 summary = np.array(summary)
 
-fig, ax = pl.subplots()
-ax.scatter(*summary.T, color='grey', s=150, marker='o')
+fig, axs = pl.subplots(1, 2)
+ax = axs[0]
+ax.scatter(summary[:,0], summary[:,1], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
 ax.set_ylabel('Alpha power')
 
+ax = axs[1]
+ax.scatter(summary[:,0], summary[:,2], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
+ax.set_xlabel('Propofol level')
+ax.set_ylabel('Delta power')
+
 ## Chirp
-chirp_ch_name = ['Fz', 'Cz', 'FCz', 'F3', 'F4',]  # always use a list even if just one
+chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
 #eeg.set_eeg_reference('average')
-eeg.set_eeg_reference(['M1','M2'])
+eeg.set_eeg_reference(['M1', 'M2'])
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
 level_id = t_to_phase_idx(chirp_onset_t)
@@ -222,7 +238,7 @@ epochs = mne.Epochs(eeg,
                     preload=True)
 epochs = epochs.pick('eeg')  # or just use all: comment this out
 
-frequencies = np.linspace(25, 55, 30)
+frequencies = np.linspace(25, 55, 35)
 n_cycles = frequencies / 2.0  # higher freqs need more cycles
 
 n_levels = len(event_id)
@@ -256,12 +272,15 @@ for eid, ax in zip(eids, axs):
     #         cnorm=None,
     #         colorbar=False)
 
-    mean_itc = np.mean(np.abs(itc.data[chirp_ch_idx, :, :]), axis=0) 
-    ax.imshow(mean_itc,
+    to_show = itc
+
+    mean_to_show = np.mean(np.abs(to_show.data[chirp_ch_idx, :, :]), axis=0) 
+
+    ax.imshow(mean_to_show,
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.6,
+              vmax=0.3,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
@@ -271,20 +290,22 @@ for eid, ax in zip(eids, axs):
     if ax is not axs[0]:
         ax.set_ylabel('')
 
-    itc_data = itc.copy().crop(tmin=0.0, tmax=0.5).data  # shape: (n_channels, n_freqs, n_times)
-    mean_itc = itc_data[chirp_ch_idx].mean(axis=0).mean(axis=1)  # average over time
-    summary.append([float(eid), mean_itc])
+    use_data = to_show.copy().crop(tmin=0.0,
+                                   tmax=0.5,
+                                   fmin=30,  # note this could be 25?
+                                   fmax=55).data  # shape: (n_channels, n_freqs, n_times)
+    mean = use_data[chirp_ch_idx].mean(axis=0).mean(axis=1)  # avg chans thens time
+    summary.append([float(eid), mean])
 
 fig, ax = pl.subplots()
 summ = np.array([(xval, np.mean(yval)) for xval, yval in summary])
-ax.scatter(*summ.T, color='grey', s=150, marker='o')
+ax.scatter(*summ.T, s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
-ch_name = ['Fz',] #['FCz', 'Fz', 'Cz'] # always list
+ch_name = ['FCz',] #['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
-#eeg.set_eeg_reference(['M1','M2'])
 eeg.set_eeg_reference('average')
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
@@ -344,16 +365,14 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.00, 0.250  # in seconds
+    tmin_pp, tmax_pp = 0.100, 0.250  # in seconds
     evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    #ptp_s_amplitudes = np.ptp(evoked_s_crop.data, axis=1) * 1e6  # Convert to µV
-    #ptp_d_amplitudes = np.ptp(evoked_d_crop.data, axis=1) * 1e6  # Convert to µV
     s_trace = evoked_s_crop.data[ch_idx].mean(axis=0) * 1e6
     d_trace = evoked_d_crop.data[ch_idx].mean(axis=0) * 1e6
     dif_trace = d_trace - s_trace
     dif = np.min(dif_trace)
-    latency = np.argmin(dif_trace)
+    latency = np.argmin(dif_trace) + tmin_pp
 
     # Plot the topomap of these amplitudes
     #fig_topo, ax_topo = pl.subplots(1, 1)
@@ -366,17 +385,16 @@ ax.legend()
 summ = np.array(summary)
 fig, axs = pl.subplots(1, 2)
 ax = axs[0]
-ax.scatter(summ[:,0], summ[:,1], color='grey', s=150, marker='o')
+ax.scatter(summ[:,0], summ[:,1], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean oddball mmn ampl')
 ax = axs[1]
-ax.scatter(summ[:,0], summ[:,2], color='grey', s=150, marker='o')
+ax.scatter(summ[:,0], summ[:,2], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
-#eeg.set_eeg_reference(['M1', 'M2'])
 #eeg.set_eeg_reference('average')
 eeg.set_eeg_reference(['Fz', 'FCz', 'Cz'])
 
@@ -472,8 +490,8 @@ ax.legend()
 
 summary = np.array(summary)
 fig, axs = pl.subplots(1, 2)
-axs[0].scatter(summary[:,0], summary[:,1], color='grey', s=150, marker='o') # amplitude
-axs[1].scatter(summary[:,0], summary[:,2], color='grey', s=150, marker='o') # latency
+axs[0].scatter(summary[:,0], summary[:,1], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral) # amplitude
+axs[1].scatter(summary[:,0], summary[:,2], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral) # latency
 axs[0].set_xlabel('Propofol level')
 axs[1].set_xlabel('Propofol level')
 axs[0].set_ylabel('Amplitude')
@@ -520,4 +538,27 @@ print(f'{np.mean(choice == target):0.2f} correct')
 print(f'{len(choice)} completed')
 
 # TODO: separate by pre/post (in future will be labeled with start token) 
+
+## Artifact sandbox
+from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
+
+ica = ICA(n_components=15, random_state=97, max_iter='auto')
+ica.fit(eeg)
+
+# Find EOG (eye blink) components
+eog_chans = ['F3','Fz','F4']
+eog_epochs = create_eog_epochs(eeg, ch_name=eog_chans)
+eog_inds, eog_scores = ica.find_bads_eog(eog_epochs, ch_name=eog_chans)
+ica.exclude.extend(eog_inds)
+
+# Find ECG (heartbeat) components
+ecg_epochs = create_ecg_epochs(eeg)
+ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
+ica.exclude.extend(ecg_inds)
+
+eeg_clean = ica.apply(eeg.copy())
+eeg.plot(title='Before cleaning', duration=30)
+eeg_clean.plot(title='After cleaning', duration=30)
+
+
 ##
