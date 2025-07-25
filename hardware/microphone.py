@@ -115,6 +115,7 @@ class Microphone(mproc):
                     if self.n_frames_captured_a.value - self.n_frames_saved_a.value > self.save_audio_buffer_shape * 3:
                         if warned_mic == 3:
                             logging.warning('Warnings from mic continue, will spare the ongoing alerts.')
+                            warned_mic += 1
                         elif warned_mic > 3:
                             pass
                         else:

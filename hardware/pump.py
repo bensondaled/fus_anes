@@ -128,7 +128,7 @@ class Pump():
                 self.error_queue.put(f'Pump: command unrecognized')
             else:
                 warnings.warn(f'Pump: Unrecognized response: {s}')
-                self.error_queue.put(f'Pump: response unrecognized')
+                self.error_queue.put(f'Pump: response unrecognized: {s}')
         except Exception as e:
             self.error_queue.put(f'Pump: {str(e)}')        
     
