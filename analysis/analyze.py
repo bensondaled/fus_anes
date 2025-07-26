@@ -151,8 +151,8 @@ for lev, ax in zip(np.unique(level_id), axs):
 
 summary = np.array(summary)
 fig, axs = pl.subplots(1, 2)
-axs[0].scatter(summary[:,0], summary[:,1], color='grey', s=150, marker='o') # rt
-axs[1].scatter(summary[:,0], summary[:,2], color='grey', s=150, marker='o') # % resp
+axs[0].scatter(summary[:,0], summary[:,1], c=prop_direction, cmap=pl.cm.Spectral, s=150, marker='o') # rt
+axs[1].scatter(summary[:,0], summary[:,2], c=prop_direction, cmap=pl.cm.Spectral, s=150, marker='o') # % resp
 axs[0].set_xlabel('Propofol level')
 axs[1].set_xlabel('Propofol level')
 axs[0].set_ylabel('RT')
@@ -218,7 +218,8 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Delta power')
 
 ## Chirp
-chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
+#chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
+chirp_ch_name = ['F3', 'F4']
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
 #eeg.set_eeg_reference('average')
 eeg.set_eeg_reference(['M1', 'M2'])
@@ -296,6 +297,11 @@ for eid, ax in zip(eids, axs):
                                    fmax=55).data  # shape: (n_channels, n_freqs, n_times)
     mean = use_data[chirp_ch_idx].mean(axis=0).mean(axis=1)  # avg chans thens time
     summary.append([float(eid), mean])
+    
+    '''
+    mne.viz.plot_topomap(use_data.mean(axis=(1,2)), itc.info, axes=ax,
+                         show=True, cmap='Reds', contours=0)
+    '''
 
 fig, ax = pl.subplots()
 summ = np.array([(xval, np.mean(yval)) for xval, yval in summary])
