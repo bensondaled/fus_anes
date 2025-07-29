@@ -10,9 +10,9 @@ from fus_anes.constants import MONTAGE
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5'
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 
 ## Load
@@ -167,8 +167,8 @@ frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
 e_f = eeg._data[frontal]
 e_p = eeg._data[posterior]
-sp_frontal, sp_t, sp_f = mts(e_f.T, fs=fs, window_size=10.0, window_step=10.0)
-sp_posterior, sp_t, sp_f  = mts(e_p.T, fs=fs, window_size=10.0, window_step=10.0)
+sp_frontal, sp_t, sp_f = mts(e_f.T, fs=fs, window_size=15.0, window_step=15.0)
+sp_posterior, sp_t, sp_f  = mts(e_p.T, fs=fs, window_size=15.0, window_step=15.0)
 def spect_t2i(t):
     return np.argmin(np.abs(t - sp_t))
 f_keep = sp_f < 40
@@ -261,7 +261,7 @@ for eid, ax in zip(eids, axs):
                                         use_fft=True,
                                         return_itc=True,
                                         average=True,
-                                        decim=2,
+                                         #decim=2,
                                         )
 
     #power.plot(picks=chirp_ch_name,
