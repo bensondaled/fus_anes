@@ -10,8 +10,9 @@ from fus_anes.constants import MONTAGE
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5'
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 
 ## Load
@@ -92,9 +93,11 @@ eeg = mne.io.RawArray(eeg_raw.T.copy(), info)
 eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
 
 # filter
-#eeg.notch_filter(freqs=60.0, fir_design='firwin')
-eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit')
-eeg.filter(l_freq=0.1, h_freq=59.5, fir_design='firwin')
+#eeg.notch_filter(freqs=61.0, fir_design='firwin')
+notch_freqs = np.arange(60, 241, 60)
+notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
+eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks='eeg')
+eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
 # reference
 eeg.set_eeg_reference('average')
@@ -310,9 +313,11 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
-ch_name = ['FCz',] #['FCz', 'Fz', 'Cz'] # always list
+ch_name = ['Fz',] #['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
-eeg.set_eeg_reference('average')
+eeg_ob = eeg.copy().filter(l_freq=0.1, h_freq=40, fir_design='firwin')
+eeg_ob.set_eeg_reference('average')
+#eeg_ob.set_eeg_reference(['M1', 'M2'])
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
 s_d = oddball[oddball.event.isin(['s','d'])].event.values
@@ -336,7 +341,7 @@ for lev,ax in zip(np.unique(level_id), axs):
     ]).astype(int)
     event_id = {'standard': 1, 'deviant': 2}
 
-    epochs = mne.Epochs(eeg,
+    epochs = mne.Epochs(eeg_ob,
                         events,
                         event_id=event_id,
                         tmin=-0.100,
@@ -371,14 +376,14 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.100, 0.250  # in seconds
+    tmin_pp, tmax_pp = 0.100, 0.300  # in seconds
     evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     s_trace = evoked_s_crop.data[ch_idx].mean(axis=0) * 1e6
     d_trace = evoked_d_crop.data[ch_idx].mean(axis=0) * 1e6
     dif_trace = d_trace - s_trace
     dif = np.min(dif_trace)
-    latency = np.argmin(dif_trace) + tmin_pp
+    latency = 1000 * ((np.argmin(dif_trace)) / fs + tmin_pp)
 
     # Plot the topomap of these amplitudes
     #fig_topo, ax_topo = pl.subplots(1, 1)
@@ -401,13 +406,15 @@ ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
-#eeg.set_eeg_reference('average')
-eeg.set_eeg_reference(['Fz', 'FCz', 'Cz'])
+eeg_ssep = eeg.copy().filter(l_freq=0.5, h_freq=50, fir_design='firwin', picks='eeg')
+#eeg_ssep.set_eeg_reference('average')
+eeg_ssep.set_eeg_reference(['Fz', 'FCz', 'Cz'])
 
-eeg.notch_filter(freqs=[60, 120, 180], method='spectrum_fit', picks=['ssep'])
-eeg.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
+# ssep-channel-specific filters applied only to it
+eeg_ssep.notch_filter(freqs=[60, 120, 180], method='spectrum_fit', picks=['ssep'])
+eeg_ssep.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
 ssep_channel = channel_names.index('ssep')
-ssep = eeg._data[ssep_channel]
+ssep = eeg_ssep._data[ssep_channel]
 
 #ssep = filter_eeg(eeg_raw[:,[channel_names.index('ssep')]],
 #                    fs=fs,
@@ -452,7 +459,7 @@ for lev,ax in zip(np.unique(level_id), axs):
     onset = onset_idx[level_id == lev]
     events = np.column_stack((onset, np.zeros_like(onset), np.ones_like(onset))).astype(int)
 
-    epochs = mne.Epochs(eeg,
+    epochs = mne.Epochs(eeg_ssep,
                         events,
                         event_id=1,
                         tmin=-0.020,
