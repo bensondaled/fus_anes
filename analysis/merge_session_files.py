@@ -15,14 +15,10 @@ out_path = f'/Users/bdd/Desktop/{out_name}.h5'
 for m in to_merge:
     with pd.HDFStore(m, 'r') as hin, pd.HDFStore(out_path, 'a') as hout:
         for key in hin:
-            print(key)
+            hout.append(key, hin[key])
             
 
 
 ##
-
-with pd.HDFStore(to_merge[1],'r') as h:
-    markers = h.markers
-    ob = h.oddball
 
 ##
