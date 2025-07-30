@@ -180,7 +180,7 @@ fig, axs = pl.subplots(2, 1, sharex=True)
 for ax, sp in zip(axs, [sp_frontal, sp_posterior]):
     sp = np.median(sp, axis=0)
 
-    vmin, vmax = np.percentile(sp, [1, 90])
+    vmin, vmax = np.percentile(sp, [1, 95])
     ax.pcolormesh(sp_t, sp_f, sp,
                  vmin=vmin, vmax=vmax,
                  cmap=pl.cm.rainbow)

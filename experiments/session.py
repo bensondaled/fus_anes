@@ -105,8 +105,10 @@ class Session():
 
     def add_marker(self, info):
         ts, txt = info
+        if len(txt) > 500:
+            logging.warning(f'Markers shouldnt be more than 500 chars, truncating "{txt}" of len {len(txt)}.')
         self.markers.append([ts, txt])
-        save('markers', dict(t=ts, text=f'{txt:<100}'), self.saver.buffer)
+        save('markers', dict(t=ts, text=f'{txt[:500]:<500}'), self.saver.buffer)
 
     def retrieve_errors(self):
         errs = []
