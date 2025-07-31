@@ -14,8 +14,8 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -447,9 +447,9 @@ ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
-ch_idx = eeg.ch_names.index('C3')
+#ch_idx = eeg.ch_names.index('C3')
 #ch_idx = eeg.ch_names.index('P3')
-#ch_idx = eeg.ch_names.index('P7')
+ch_idx = eeg.ch_names.index('P7')
 
 fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
 time = eeg_time - eeg_time[0]
@@ -492,8 +492,8 @@ for lev,ax in zip(np.unique(level_id), axs):
                         events,
                         event_id=1,
                         tmin=-0.020,
-                        tmax=0.120,# or .100?
-                        baseline=(-0.010, 0.005),
+                        tmax=0.080,
+                        baseline=(-0.010, 0.00),
                         reject_by_annotation=True,
                         preload=True)
     evoked = epochs.average()
@@ -512,14 +512,12 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     evoked_zero = evoked.copy().crop(tmin=0, tmax=0)
-    tmin_pp, tmax_pp = 0.010, 0.060  # in seconds
+    tmin_pp, tmax_pp = 0.00, 0.060  # in seconds
     evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     trace = evoked_crop.data * 1e6
     zero = evoked_zero.data.squeeze() * 1e6
-    #amplitude = np.abs(np.min(trace) - zero)
     amplitude = np.ptp(np.abs(trace), axis=1)
-    #latency = np.argmax(np.abs(trace), axis=1)
-    latency = np.argmin(trace, axis=1)
+    latency = 1000 * (np.argmin(trace, axis=1) / fs + tmin_pp)
 
     summary.append([phase_levels[lev], amplitude[ch_idx], latency[ch_idx]])
 
@@ -545,7 +543,7 @@ axs[1].set_ylabel('Latency')
 
 
 ## Vigilance
-data_file = '/Users/bdd/data/fus_anes/2025-07-24_vigilance_b003.txt'
+data_file = '/Users/bdd/data/fus_anes/2025-07-30_vigilance_b004.txt'
 with open(data_file, 'r') as f:
     vdata = f.readlines()
 vdata = [json.loads(l) for l in vdata]
@@ -557,40 +555,66 @@ vdata = pd.DataFrame(dat)
 vdata['ts'] = dt
 vdata['task'] = task
 
-def drop_leading_repeats(df, column):
-    first_value = df[column].iloc[0]
-    change_index = (df[column] != first_value).idxmax()
-    if df[column].nunique() == 1:
-        return df.iloc[0:0]  # empty DataFrame
-    return df.iloc[change_index:].reset_index(drop=True)
-vdata = drop_leading_repeats(vdata, 'task') # drop leading pvt
-vdata = drop_leading_repeats(vdata, 'task') # drop leading dsst
+start_idx = np.argwhere(vdata.task == 'start').squeeze()
+start_idx = np.append(start_idx, 1e11)
+for r, (si0, si1) in enumerate(zip(start_idx[:-1], start_idx[1:])):
+    rng = np.arange(len(vdata))
+    in_grp = (rng > si0) & (rng < si1)
+    vdata.loc[in_grp, 'rep'] = r
+
+vdata = vdata[vdata.task != 'start']
+n_reps = len(np.unique(vdata.rep.values))
 
 pvt = vdata[vdata.task == 'pvt']
 dsst = vdata[vdata.task == 'dsst']
+dsst = dsst[~dsst.target.isna()]
 
 # pvt
-rt = pvt[~(pvt.note == 'early')].rt.values
-rt *= 1000
-fig, ax = pl.subplots()
-ax.hist(rt, color='grey', bins=25)
-ax.set_xlabel('RT (ms)')
 # TODO analyze early presses
+fig, ax = pl.subplots(1, sharex=True)
+for rep in range(n_reps):
+    use = (pvt.rep == rep) & (pvt.note != 'early')
+    rt_ = pvt[use].rt.values
+    ax.hist(1000*rt_, histtype='step', label=rep, density=True)
+ax.set_xlabel('RT (ms)')
+ax.legend()
 
 # dsst
-dsst = dsst[~dsst.target.isna()]
-target = dsst.target.str.replace('.jpeg','').values
-choice = dsst.key.str.replace('num_','').values
-print(f'{np.mean(choice == target):0.2f} correct')
-print(f'{len(choice)} completed')
+fig, axs = pl.subplots(1, 3)
+for rep in range(n_reps):
+    use = (dsst.rep == rep)
+    dsst_ = dsst[use]
+    target = dsst_.target.str.replace('.jpeg','').values
+    choice = dsst_.key.str.replace('num_','').values
+
+    n_completed = len(choice)
+    rt = np.mean(dsst_.rt.values)
+    pct_corr = np.mean(choice == target)
+    print(f'Rep {rep}')
+    print(f'\t{pct_corr:0.2f} correct')
+    print(f'\t{n_completed} completed')
+
+    ax = axs[0]
+    ax.bar([rep], [n_completed], color='grey')
+    
+    ax = axs[1]
+    ax.bar([rep], [100*pct_corr], color='grey')
+    
+    ax = axs[2]
+    ax.bar([rep], [1000*rt], color='grey')
+
+axs[0].set_title('N completed')
+axs[1].set_title('% correct')
+axs[1].set_ylim([0,100])
+axs[2].set_title('RT (ms)')
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
 ## EEG artifact cleaning sandbox
 
-#ica = ICA(n_components=5, method='fastica', random_state=97)
-#ica.fit(eeg_ica)
-#ica.plot_components()  # manually select blink/EOG components
-#ica.plot_sources(eeg_ica.pick_types(eeg=True))  # confirm timecourse
+#ica = ICA(n_components=13)
+#ica.fit(eeg)
+#ica.plot_components()
+#ica.plot_sources(eeg.pick_types(eeg=True))
 #
 #ica.exclude = []
 #ica.apply(eeg_ica)
