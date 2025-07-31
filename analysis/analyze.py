@@ -8,20 +8,24 @@ import matplotlib.pyplot as pl
 pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 
-from util import mts, filter_eeg, detect_switch, nanpow2db
+from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid
 from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 clean_eeg_path = os.path.join(src_dir, f'{name}.fif.gz')
 
 already_clean = os.path.exists(clean_eeg_path)
+
+# Display params
+prop_direction_cols = {d:c for c,d in zip(pl.cm.Spectral([0.2,0.8]), [1,-1])}
+prop_direction_markers = {1:'>', -1:'<'}
 
 ## Load
 with pd.HDFStore(session_path, 'r') as h:
@@ -52,7 +56,7 @@ eeg_time = slope * np.arange(len(true_eeg_time)) + intercept
 
 eeg = eeg.values[:, :len(channel_names)]
 eeg *= 1e-6
-eeg_raw = eeg
+eeg_raw = eeg # Volts
 
 def ch_name_to_idx(name):
     if isinstance(name, (str,)):
@@ -94,7 +98,7 @@ elif already_clean:
 
 # filter
 notch_freqs = np.arange(60, 241, 60)
-notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
+#notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
 eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
@@ -193,22 +197,37 @@ for lev, ax in zip(np.unique(level_id), axs):
     summary.append([phase_levels[lev], np.nanmean(rts), pct_resp])
 
 summary = np.array(summary)
-fig, axs = pl.subplots(1, 2)
-axs[0].scatter(summary[:,0], summary[:,1], c=prop_direction, cmap=pl.cm.Spectral, s=150, marker='o') # rt
-axs[1].scatter(summary[:,0], summary[:,2], c=prop_direction, cmap=pl.cm.Spectral, s=150, marker='o') # % resp
+
+lvals, rts, pcts = summary.T
+
+fig, axs = pl.subplots(1, 2, gridspec_kw=dict(wspace=0.5))
+
+for pd in [1,-1]:
+    m = prop_direction_markers[pd]
+    c = prop_direction_cols[pd]
+
+    use = prop_direction == pd
+    lv = lvals[use]
+
+    axs[0].scatter(lv, rts[use], color=c, s=150, marker=m) # rt
+    axs[1].plot(lv, pcts[use],  color=c, markersize=10, marker=m) # % resp
+
 axs[0].set_xlabel('Propofol level')
 axs[1].set_xlabel('Propofol level')
 axs[0].set_ylabel('RT')
 axs[1].set_ylabel('% response')
 
+pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
+
 ## Spectrogram
 eeg.set_eeg_reference('average')
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
-e_f = eeg._data[frontal]
-e_p = eeg._data[posterior]
-sp_frontal, sp_t, sp_f = mts(e_f.T, fs=fs, window_size=15.0, window_step=15.0)
-sp_posterior, sp_t, sp_f  = mts(e_p.T, fs=fs, window_size=15.0, window_step=15.0)
+e_f = eeg._data[frontal] * 1e6 # to uV
+e_p = eeg._data[posterior] * 1e6 # to uV
+decim = 4
+sp_frontal, sp_t, sp_f = mts(e_f.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
+sp_posterior, sp_t, sp_f  = mts(e_p.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
 def spect_t2i(t):
     return np.argmin(np.abs(t - sp_t))
 f_keep = sp_f < 40
@@ -239,8 +258,8 @@ for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
     chunk = sp_frontal[:, :, i0:i1]
-    chunk *= 1e6
-    #chunk = nanpow2db(chunk)
+
+    chunk = nanpow2db(chunk)
 
     chunk_a = chunk[:, alpha, :]
     chunk_d = chunk[:, delta, :]
@@ -249,16 +268,40 @@ for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
     summary.append([lev, mean_a, mean_d])
 summary = np.array(summary)
 
-fig, axs = pl.subplots(1, 2)
+lvals, apows, dpows = summary.T
+
+fig, axs = pl.subplots(1, 2, gridspec_kw=dict(wspace=0.5), figsize=(9,5))
+
+for pd in [1,-1]:
+    m = prop_direction_markers[pd]
+    c = prop_direction_cols[pd]
+
+    use = prop_direction == pd
+    lv = lvals[use]
+
+    ax = axs[0]
+    ap = apows[use]
+    ax.scatter(lv, ap, s=150, marker=m, color=c)
+    sx, sy, s50 = fit_sigmoid(lv, ap, return_ec50=True, b0=0.1)
+    ax.plot(sx, sy, color=c, label=f'ec50: {s50:0.1f}')
+
+    ax = axs[1]
+    dp = dpows[use]
+    ax.scatter(lv, dp, s=150, marker=m, color=c)
+    sx, sy, s50 = fit_sigmoid(lv, dp, return_ec50=True, b0=0.5)
+    ax.plot(sx, sy, color=c, label=f'ec50: {s50:0.1f}')
+
 ax = axs[0]
-ax.scatter(summary[:,0], summary[:,1], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
-ax.set_ylabel('Alpha power')
+ax.set_ylabel(r'$\alpha$ power (dB)')
+ax.legend()
 
 ax = axs[1]
-ax.scatter(summary[:,0], summary[:,2], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
 ax.set_xlabel('Propofol level')
-ax.set_ylabel('Delta power')
+ax.set_ylabel(r'$\Delta$ power (dB)')
+ax.legend()
+
+pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 
 ## Chirp
 #chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4

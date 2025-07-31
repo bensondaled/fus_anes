@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, iirnotch, tf2zpk, zpk2sos, sosfiltfilt
 from scipy.ndimage import median_filter
+from scipy.optimize import curve_fit
 
 from multitaper import multitaper_spectrogram as mts, nanpow2db
 
@@ -37,3 +38,24 @@ def detect_switch(signal, threshold=1.0, min_duration=3, baseline_window=5000):
 
     return np.array(switch_starts)
 
+def fit_sigmoid(x, y, return_ec50=False, b0=0.5):
+    def sigmoid(x, A, B, C, D):
+        '''
+        A: bottom plateau
+        B: Hill slope
+        C: EC50
+        D: Top plateau
+        '''
+        return A + (D - A) / (1 + (x / C)**B)
+    
+    params, covariance = curve_fit(sigmoid,
+                                   x,
+                                   y,
+                                   p0=(np.min(y), b0, np.median(y), np.max(y)),
+                                   maxfev=100000,
+                                   method='trf')
+    xvals = np.linspace(np.min(x), np.max(x), 50)
+    yvals = sigmoid(xvals, *params)
+    if return_ec50:
+        return xvals, yvals, params[2]
+    return xvals, yvals
