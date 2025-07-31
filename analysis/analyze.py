@@ -4,16 +4,21 @@ import pandas as pd
 import mne
 import os
 import json
-from util import mts, filter_eeg, detect_switch, nanpow2db
-from fus_anes.constants import MONTAGE
+from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 
+from util import mts, filter_eeg, detect_switch, nanpow2db
+from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
+clean_eeg_path = os.path.join(src_dir, f'{name}.fif.gz')
+
+already_clean = os.path.exists(clean_eeg_path)
 
 ## Load
 with pd.HDFStore(session_path, 'r') as h:
@@ -39,11 +44,9 @@ def t2i(t):
         return np.array([t2i(x) for x in t])
     else:
         return np.argmin(np.abs(t - true_eeg_time))
-#eeg_time = np.linspace(eeg_time[0], eeg_time[-1], len(eeg_time))
 slope, intercept = np.polyfit(np.arange(len(true_eeg_time)), true_eeg_time, deg=1)
 eeg_time = slope * np.arange(len(true_eeg_time)) + intercept
 
-channel_names = MONTAGE
 eeg = eeg.values[:, :len(channel_names)]
 eeg *= 1e-6
 eeg_raw = eeg
@@ -53,6 +56,61 @@ def ch_name_to_idx(name):
         return channel_names.index(name) 
     elif isinstance(name, (list, np.ndarray)):
         return [ch_name_to_idx(n) for n in name]
+
+## Format into MNE
+ch_types = [{'ssep':'stim', 'gripswitch':'stim', 'ecg':'ecg'}.get(c, 'eeg') for c in channel_names]
+info = mne.create_info(ch_names=channel_names,
+                       sfreq=fs,
+                       ch_types=ch_types)
+eeg = mne.io.RawArray(eeg_raw.T.copy(), info)
+eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
+
+# in case nan's are present (should only be for merged sessions due to a software close in session
+nan_samples = np.where(np.isnan(eeg._data).any(axis=0))[0]
+start_nan = nan_samples[0] / fs
+end_nan = nan_samples[-1] / fs
+eeg.annotations.append(onset=start_nan, duration=end_nan-start_nan, description='bad_nan')
+
+
+## Clean EEG
+if not already_clean:
+    eeg_clean = eeg.copy()
+    eeg_clean._data = np.nan_to_num(eeg_clean._data)
+    eeg_clean.set_eeg_reference('average', projection=False)
+    eeg_clean.plot(block=True, duration=30, use_opengl=True,
+                   highpass=1.0, lowpass=40)
+
+
+    eeg_clean.save(clean_eeg_path,) #overwrite=True)
+    eeg = eeg_clean
+elif already_clean:
+    eeg = mne.io.read_raw_fif(clean_eeg_path, preload=True)
+
+## Task-specific preprocessing
+
+# filter
+notch_freqs = np.arange(60, 241, 60)
+#notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
+eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
+eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
+
+# reference
+eeg.set_eeg_reference('average')
+
+# extract peripheral signals
+eeg_ssep = eeg.copy()
+eeg_ssep.set_eeg_reference(['Fz', 'FCz', 'Cz'])
+eeg_ssep.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
+ssep_channel = channel_names.index('ssep')
+ssep = eeg_ssep._data[ssep_channel]
+
+eeg_switch = eeg.copy()
+eeg_switch.set_eeg_reference('average')
+eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch'])
+switch_channel = channel_names.index('gripswitch')
+switch = eeg_switch._data[switch_channel]
+
+
 
 ## Label propofol levels
 if tci_cmd is not None:
@@ -84,33 +142,10 @@ def t_to_phase_level(t):
         idx = t_to_phase_idx(t)
         return phase_levels[idx]
 
-## Format into MNE
-ch_types = [{'ssep':'stim', 'gripswitch':'stim', 'ecg':'ecg'}.get(c, 'eeg') for c in channel_names]
-info = mne.create_info(ch_names=channel_names,
-                       sfreq=fs,
-                       ch_types=ch_types)
-eeg = mne.io.RawArray(eeg_raw.T.copy(), info)
-eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
-
-# filter
-#eeg.notch_filter(freqs=61.0, fir_design='firwin')
-notch_freqs = np.arange(60, 241, 60)
-notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
-eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks='eeg')
-eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
-
-# reference
-eeg.set_eeg_reference('average')
-#eeg.set_eeg_reference(['M1','M2'])
 
 ## ---- Analyses
 
 ## Squeeze
-switch = filter_eeg(eeg_raw[:,[channel_names.index('gripswitch')]],
-                    fs=fs,
-                    lo=20,
-                    hi=0.1,
-                    notch=60)[:,0]
 
 fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
 time = eeg_time - eeg_time[0]
@@ -144,7 +179,7 @@ for lev, ax in zip(np.unique(level_id), axs):
         rt = candidates[0] - cmd_t if len(candidates) else np.nan
         rts.append(float(rt) * 1000)
     rts = np.array(rts)
-    pct_resp = 100.0 * np.mean(~np.isnan(rts))
+    pct_resp = 100.0 * np.nanmean(~np.isnan(rts))
 
     ax.hist(rts[~np.isnan(rts)], bins=15, color='grey')
     ax.set_title(f'% resp: {pct_resp:0.0f}%, lev {phase_levels[lev]:0.2f}', fontsize=8)
@@ -178,9 +213,9 @@ sp_posterior = sp_posterior[:, f_keep, :]
 
 fig, axs = pl.subplots(2, 1, sharex=True)
 for ax, sp in zip(axs, [sp_frontal, sp_posterior]):
-    sp = np.median(sp, axis=0)
+    sp = np.nanmedian(sp, axis=0)
 
-    vmin, vmax = np.percentile(sp, [1, 95])
+    vmin, vmax = np.nanpercentile(sp, [1, 95])
     ax.pcolormesh(sp_t, sp_f, sp,
                  vmin=vmin, vmax=vmax,
                  cmap=pl.cm.rainbow)
@@ -236,9 +271,10 @@ event_id = {f'{phase_levels[x]:0.1f}':x for x in np.unique(level_id)}
 epochs = mne.Epochs(eeg,
                     events,
                     event_id=event_id,
-                    tmin=-0.2, tmax=1.5,
+                    tmin=-0.2, tmax=0.600,
                     baseline=(-0.2, 0),
                     detrend=1,
+                    reject_by_annotation=True,
                     preload=True)
 epochs = epochs.pick('eeg')  # or just use all: comment this out
 
@@ -348,6 +384,7 @@ for lev,ax in zip(np.unique(level_id), axs):
                         tmax=0.500,
                         baseline=(-0.100, 0),
                         detrend=1,
+                        reject_by_annotation=True,
                         preload=True)
     epochs = epochs.pick('eeg')
 
@@ -406,22 +443,6 @@ ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
-eeg_ssep = eeg.copy().filter(l_freq=0.5, h_freq=50, fir_design='firwin', picks='eeg')
-#eeg_ssep.set_eeg_reference('average')
-eeg_ssep.set_eeg_reference(['Fz', 'FCz', 'Cz'])
-
-# ssep-channel-specific filters applied only to it
-eeg_ssep.notch_filter(freqs=[60, 120, 180], method='spectrum_fit', picks=['ssep'])
-eeg_ssep.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
-ssep_channel = channel_names.index('ssep')
-ssep = eeg_ssep._data[ssep_channel]
-
-#ssep = filter_eeg(eeg_raw[:,[channel_names.index('ssep')]],
-#                    fs=fs,
-#                    lo=fs/2-0.1,
-#                    hi=60,
-#                    notch=60)[:,0]
-
 fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
 time = eeg_time - eeg_time[0]
 ax.plot(time, ssep, color='k')
@@ -463,14 +484,15 @@ for lev,ax in zip(np.unique(level_id), axs):
                         events,
                         event_id=1,
                         tmin=-0.020,
-                        tmax=0.100,
-                        baseline=(-0.005, 0.010),
+                        tmax=0.120,# or .100?
+                        baseline=(-0.010, 0.005),
+                        reject_by_annotation=True,
                         preload=True)
     evoked = epochs.average()
     times_ms = evoked.times * 1000
 
     cols = ['slateblue', 'darkorange', 'grey']
-    cnames = ['C3', 'C4', 'Pz']
+    cnames = ['C3', 'P3', 'P7']
     for ch_name, col in zip(cnames, cols):
         ch_idx = evoked.ch_names.index(ch_name)
         ax.plot(times_ms, evoked.data[ch_idx] * 1e6, label=ch_name, color=col, lw=2)
@@ -482,7 +504,7 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     evoked_zero = evoked.copy().crop(tmin=0, tmax=0)
-    tmin_pp, tmax_pp = 0.00, 0.060  # in seconds
+    tmin_pp, tmax_pp = 0.010, 0.060  # in seconds
     evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     trace = evoked_crop.data * 1e6
     zero = evoked_zero.data.squeeze() * 1e6
@@ -491,6 +513,8 @@ for lev,ax in zip(np.unique(level_id), axs):
     #latency = np.argmax(np.abs(trace), axis=1)
     latency = np.argmin(trace, axis=1)
     ch_idx = evoked.ch_names.index('C3')
+    #ch_idx = evoked.ch_names.index('P3')
+    #ch_idx = evoked.ch_names.index('P7')
 
     summary.append([phase_levels[lev], amplitude[ch_idx], latency[ch_idx]])
 
@@ -553,25 +577,30 @@ print(f'{len(choice)} completed')
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
 ## Artifact sandbox
-from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 
-ica = ICA(n_components=15, random_state=97, max_iter='auto')
-ica.fit(eeg)
+#ica = ICA(n_components=5, method='fastica', random_state=97)
+#ica.fit(eeg_ica)
+#ica.plot_components()  # manually select blink/EOG components
+#ica.plot_sources(eeg_ica.pick_types(eeg=True))  # confirm timecourse
+#
+#ica.exclude = []
+#ica.apply(eeg_ica)
+#
+## Find EOG (eye blink) components
+#eog_chans = ['F3','Fz','F4']
+#eog_epochs = create_eog_epochs(eeg_ica, ch_name=eog_chans)
+#eog_inds, eog_scores = ica.find_bads_eog(eog_epochs, ch_name=eog_chans)
+#ica.exclude.extend(eog_inds)
+#
+## Find ECG (heartbeat) components
+#ecg_epochs = create_ecg_epochs(eeg_ica)
+#ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
+#ica.exclude.extend(ecg_inds)
+#
+#eeg_clean = ica.apply(eeg_ica.copy())
+#eeg_ica.plot(title='Before cleaning', duration=30)
+#eeg_clean.plot(title='After cleaning', duration=30)
 
-# Find EOG (eye blink) components
-eog_chans = ['F3','Fz','F4']
-eog_epochs = create_eog_epochs(eeg, ch_name=eog_chans)
-eog_inds, eog_scores = ica.find_bads_eog(eog_epochs, ch_name=eog_chans)
-ica.exclude.extend(eog_inds)
-
-# Find ECG (heartbeat) components
-ecg_epochs = create_ecg_epochs(eeg)
-ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
-ica.exclude.extend(ecg_inds)
-
-eeg_clean = ica.apply(eeg.copy())
-eeg.plot(title='Before cleaning', duration=30)
-eeg_clean.plot(title='After cleaning', duration=30)
 
 
 ##

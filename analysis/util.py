@@ -6,6 +6,7 @@ from scipy.ndimage import median_filter
 from multitaper import multitaper_spectrogram as mts, nanpow2db
 
 def filter_eeg(data, fs, lo=50, hi=0.5, notch=60):
+    data = np.nan_to_num(data)
 
     b, a = butter(2, [hi, lo], fs=fs, btype='bandpass', analog=False)
     b0, a0 = iirnotch(notch, 20.0, fs=fs)
