@@ -4,6 +4,8 @@ import pandas as pd
 import mne
 import os
 import json
+import matplotlib.pyplot as pl
+pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 
 from util import mts, filter_eeg, detect_switch, nanpow2db
@@ -12,8 +14,9 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 clean_eeg_path = os.path.join(src_dir, f'{name}.fif.gz')
@@ -67,9 +70,10 @@ eeg.set_montage(mne.channels.make_standard_montage('standard_1020'))
 
 # in case nan's are present (should only be for merged sessions due to a software close in session
 nan_samples = np.where(np.isnan(eeg._data).any(axis=0))[0]
-start_nan = nan_samples[0] / fs
-end_nan = nan_samples[-1] / fs
-eeg.annotations.append(onset=start_nan, duration=end_nan-start_nan, description='bad_nan')
+if len(nan_samples):
+    start_nan = nan_samples[0] / fs
+    end_nan = nan_samples[-1] / fs
+    eeg.annotations.append(onset=start_nan, duration=end_nan-start_nan, description='bad_nan')
 
 
 ## Clean EEG
@@ -86,11 +90,11 @@ if not already_clean:
 elif already_clean:
     eeg = mne.io.read_raw_fif(clean_eeg_path, preload=True)
 
-## Task-specific preprocessing
+## Preprocessing
 
 # filter
 notch_freqs = np.arange(60, 241, 60)
-#notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
+notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
 eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
@@ -99,10 +103,11 @@ eeg.set_eeg_reference('average')
 
 # extract peripheral signals
 eeg_ssep = eeg.copy()
-eeg_ssep.set_eeg_reference(['Fz', 'FCz', 'Cz'])
+eeg_ssep = eeg_ssep.notch_filter(freqs=[60,120,180], method='spectrum_fit', picks=['ssep']) # 2nd notch
 eeg_ssep.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep'])
 ssep_channel = channel_names.index('ssep')
 ssep = eeg_ssep._data[ssep_channel]
+eeg_ssep.set_eeg_reference(['Fz'])#, 'FCz', 'Cz'])
 
 eeg_switch = eeg.copy()
 eeg_switch.set_eeg_reference('average')
@@ -320,7 +325,7 @@ for eid, ax in zip(eids, axs):
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.3,
+              vmax=0.5,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
@@ -351,9 +356,8 @@ ax.set_ylabel('Mean chirp responses (ITC)')
 ## Oddball
 ch_name = ['Fz',] #['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
-eeg_ob = eeg.copy().filter(l_freq=0.1, h_freq=40, fir_design='firwin')
+eeg_ob = eeg.copy()
 eeg_ob.set_eeg_reference('average')
-#eeg_ob.set_eeg_reference(['M1', 'M2'])
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
 s_d = oddball[oddball.event.isin(['s','d'])].event.values
@@ -443,6 +447,10 @@ ax.set_ylabel('Mean oddball mmn latency')
 
 
 ## SSEP
+ch_idx = eeg.ch_names.index('C3')
+#ch_idx = eeg.ch_names.index('P3')
+#ch_idx = eeg.ch_names.index('P7')
+
 fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
 time = eeg_time - eeg_time[0]
 ax.plot(time, ssep, color='k')
@@ -461,7 +469,7 @@ onset_t = onset_t[keep]
 onset_idx = onset_idx[keep]
 
 inferred_ssep_rate = 1/np.median(np.diff(onset_t))
-print(f'Inferred rate of {inferred_ssep_rate:0.1f} Hz - if far from 7, inspect.')
+print(f'Inferred rate of {inferred_ssep_rate:0.2f} Hz - if far from 7, inspect.')
 
 for idx in onset_idx:
     ax.axvline(time[idx], color='pink')
@@ -512,9 +520,6 @@ for lev,ax in zip(np.unique(level_id), axs):
     amplitude = np.ptp(np.abs(trace), axis=1)
     #latency = np.argmax(np.abs(trace), axis=1)
     latency = np.argmin(trace, axis=1)
-    ch_idx = evoked.ch_names.index('C3')
-    #ch_idx = evoked.ch_names.index('P3')
-    #ch_idx = evoked.ch_names.index('P7')
 
     summary.append([phase_levels[lev], amplitude[ch_idx], latency[ch_idx]])
 
@@ -533,6 +538,11 @@ axs[0].set_xlabel('Propofol level')
 axs[1].set_xlabel('Propofol level')
 axs[0].set_ylabel('Amplitude')
 axs[1].set_ylabel('Latency')
+
+
+
+
+
 
 ## Vigilance
 data_file = '/Users/bdd/data/fus_anes/2025-07-24_vigilance_b003.txt'
@@ -573,10 +583,9 @@ target = dsst.target.str.replace('.jpeg','').values
 choice = dsst.key.str.replace('num_','').values
 print(f'{np.mean(choice == target):0.2f} correct')
 print(f'{len(choice)} completed')
-
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
-## Artifact sandbox
+## EEG artifact cleaning sandbox
 
 #ica = ICA(n_components=5, method='fastica', random_state=97)
 #ica.fit(eeg_ica)
