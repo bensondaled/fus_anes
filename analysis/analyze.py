@@ -1,9 +1,4 @@
 ##
-'''
-TODO: need to tweak the pipeline for cleaning, basically to display for bad section rejection, and during that display have it be avg referenced and filtered, but then ideally I'd save a totally unfiltered and unreferenced version that just keeps those annotations. then when i load it, i do (in THIS order): filter, reference to avg, and NOT reference again
-'''
-
-##
 import numpy as np
 import pandas as pd
 import mne
@@ -89,7 +84,7 @@ if len(nan_samples):
 if not already_clean:
     eeg_clean = eeg.copy()
     eeg_clean._data = np.nan_to_num(eeg_clean._data)
-    eeg_clean.set_eeg_reference('average', projection=False)
+    eeg_clean.set_eeg_reference('average', projection=True) # project True so it doesn't lose original data
     eeg_clean.plot(block=True, duration=30, use_opengl=True,
                    highpass=1.0, lowpass=40)
 
@@ -107,6 +102,9 @@ notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
 eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
+# reference
+#eeg.set_eeg_reference('average', projection=False) # WILL INSTEAD DO THIS PER ANALYSIS
+
 # extract peripheral signals
 eeg_ssep = eeg.copy()
 eeg_ssep = eeg_ssep.notch_filter(freqs=[60,120,180], method='spectrum_fit', picks=['ssep']) # 2nd notch
@@ -119,8 +117,6 @@ eeg_switch = eeg.copy()
 eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch'])
 switch_channel = channel_names.index('gripswitch')
 switch = eeg_switch._data[switch_channel]
-
-
 
 ## Label propofol levels
 if tci_cmd is not None:
@@ -223,8 +219,9 @@ pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 ## Spectrogram
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
-e_f = eeg._data[frontal] * 1e6 # to uV
-e_p = eeg._data[posterior] * 1e6 # to uV
+eeg_spect = eeg.copy().set_eeg_reference('average', projection=False)
+e_f = eeg_spect._data[frontal] * 1e6 # to uV
+e_p = eeg_spect._data[posterior] * 1e6 # to uV
 decim = 4
 sp_frontal, sp_t, sp_f = mts(e_f.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
 sp_posterior, sp_t, sp_f  = mts(e_p.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
@@ -304,6 +301,7 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 
 ## Chirp
+eeg_chirp = eeg.copy().set_eeg_reference('average', projection=False)
 #chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
 chirp_ch_name = ['F3', 'F4']
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
@@ -314,7 +312,7 @@ chirp_onset = t2i(chirp_onset_t)
 events = np.array([[int(idx), 0, lid] for idx, lid in zip(chirp_onset, level_id)])
 event_id = {f'{phase_levels[x]:0.1f}':x for x in np.unique(level_id)}
 
-epochs = mne.Epochs(eeg,
+epochs = mne.Epochs(eeg_chirp,
                     events,
                     event_id=event_id,
                     tmin=-0.2, tmax=0.600,
@@ -398,7 +396,8 @@ ax.set_ylabel('Mean chirp responses (ITC)')
 ch_name = ['Fz']# ['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
 eeg_ob = eeg.copy()
-eeg_ob = eeg_ob.filter(l_freq=0.5, h_freq=20, fir_design='firwin', picks='eeg') # note this is on top of main loading filter as of now
+eeg_ob = eeg_ob.filter(l_freq=1, h_freq=20, fir_design='firwin', picks='eeg') # note this is on top of main loading filter as of now
+eeg_ob.set_eeg_reference('average', projection=False)
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
 s_d = oddball[oddball.event.isin(['s','d'])].event.values
@@ -474,8 +473,10 @@ for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
 
     # SANDBOX: using some MNE tools to dig deeper
     evoked_diff = mne.combine_evoked([mean_deviant, mean_standard], weights=[1, -1])
-    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz'], times=[0.0, 0.180, 0.360], title=f'level {phase_levels[lev]:0.1f}')
-    fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.pdf')
+    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz'],
+                                 times=[0.0, 0.180, 0.360],
+                                 title=f'level {phase_levels[lev]:0.1f}')
+    fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.png')
     pl.close(fig)
     #evoked_diff.plot_topomap(times=[0.050, 0.150, 0.250], ch_type='eeg', axes=ax2)
 
