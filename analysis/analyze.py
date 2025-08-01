@@ -13,9 +13,9 @@ from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -301,9 +301,10 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 
 ## Chirp
-eeg_chirp = eeg.copy().set_eeg_reference('average', projection=False)
-#chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
-chirp_ch_name = ['F3', 'F4']
+#eeg_chirp = eeg.copy().set_eeg_reference('average', projection=False) # worked v well w/ b004
+eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
+#chirp_ch_name = ['Cz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
+chirp_ch_name = ['F3', 'F4'] # worked v well w/ b004
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
@@ -364,7 +365,7 @@ for eid, ax in zip(eids, axs):
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.5,
+              vmax=0.4,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
@@ -393,6 +394,7 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
+SHUF = 'sd' # False / 'sd' / 'rand'
 ch_name = ['Fz']# ['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
 eeg_ob = eeg.copy()
@@ -400,9 +402,14 @@ eeg_ob = eeg_ob.filter(l_freq=1, h_freq=20, fir_design='firwin', picks='eeg') # 
 eeg_ob.set_eeg_reference('average', projection=False)
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
-s_d = oddball[oddball.event.isin(['s','d'])].event.values
+s_d = oddball[oddball.event.isin(['s','d'])].event.values.copy()
 level_id = t_to_phase_idx(ob_events_t)
 ob_onset = t2i(ob_events_t)
+
+if SHUF == 'sd':
+    np.random.shuffle(s_d)
+elif SHUF == 'rand':
+    ob_onset = np.random.randint(np.min(ob_onset), np.max(ob_onset), size=ob_onset.shape)
 
 n_levels = len(np.unique(level_id))
 fig, axs = pl.subplots(3, 3, figsize=(15,4),
@@ -410,10 +417,8 @@ fig, axs = pl.subplots(3, 3, figsize=(15,4),
                        gridspec_kw=dict(left=0.05, right=0.98))
 axs = axs.ravel()
 
-fig2, axs2 = pl.subplots(n_levels, 4)
-
 summary = []
-for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
+for lev,ax in zip(np.unique(level_id), axs):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
 
@@ -423,16 +428,14 @@ for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
     ]).astype(int)
     event_id = {'standard': 1, 'deviant': 2}
     
-    reject_criteria = dict(eeg=150e-6)
     epochs = mne.Epochs(eeg_ob,
                         events,
                         event_id=event_id,
                         tmin=-0.100,
                         tmax=0.400,
-                        baseline=(-0.100, 0),
+                        baseline=(-0.025, 0),
                         detrend=1,
                         reject_by_annotation=True,
-                        reject=reject_criteria,
                         preload=True)
     epochs = epochs.pick('eeg')
 
@@ -440,6 +443,16 @@ for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
     mean_deviant = epochs['deviant'].average()
     err_standard = epochs['standard'].standard_error()
     err_deviant = epochs['deviant'].standard_error()
+
+    # SANDBOX: using some MNE tools to dig deeper
+    #evoked_diff = mne.combine_evoked([mean_deviant, mean_standard], weights=[1, -1])
+    evoked_diff = mne.combine_evoked([mean_deviant], weights=[1,]) # TODO TEMP
+    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz','M1','M2','Oz','C3','C4'],
+                                 times=[0.0, 0.100, 0.250],
+                                 title=f'level {phase_levels[lev]:0.1f}')
+    fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.png')
+    pl.close(fig)
+    # --
 
     times = mean_standard.times * 1000
 
@@ -470,15 +483,6 @@ for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
     latency = 1000 * ((np.argmin(dif_trace)) / fs + tmin_pp)
 
     summary.append([phase_levels[lev], dif, latency])
-
-    # SANDBOX: using some MNE tools to dig deeper
-    evoked_diff = mne.combine_evoked([mean_deviant, mean_standard], weights=[1, -1])
-    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz'],
-                                 times=[0.0, 0.180, 0.360],
-                                 title=f'level {phase_levels[lev]:0.1f}')
-    fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.png')
-    pl.close(fig)
-    #evoked_diff.plot_topomap(times=[0.050, 0.150, 0.250], ch_type='eeg', axes=ax2)
 
 
 ax.legend()
