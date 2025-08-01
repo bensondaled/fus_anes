@@ -14,9 +14,9 @@ from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -409,7 +409,7 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
-SHUF = 'sd' # False / 'sd' / 'rand'
+SHUF = False # False / 'sd' / 'rand'
 ch_name = ['Fz']# ['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
 eeg_ob = eeg.copy()
@@ -447,8 +447,8 @@ for lev,ax in zip(np.unique(level_id), axs):
                         events,
                         event_id=event_id,
                         tmin=-0.100,
-                        tmax=0.400,
-                        baseline=(-0.025, 0),
+                        tmax=0.500,
+                        baseline=(-0.050, 0),
                         detrend=1,
                         reject_by_annotation=True,
                         preload=True)
