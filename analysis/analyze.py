@@ -7,19 +7,21 @@ import json
 import matplotlib.pyplot as pl
 pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
+from mne_icalabel import label_components
 
 from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid
 from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
 clean_eeg_path = os.path.join(src_dir, f'{name}.fif.gz')
+ica_path = os.path.join(src_dir, f'{name}_ica.fif.gz')
 
 already_clean = os.path.exists(clean_eeg_path)
 
@@ -88,22 +90,35 @@ if not already_clean:
     eeg_clean.plot(block=True, duration=30, use_opengl=True,
                    highpass=1.0, lowpass=40)
 
-
     eeg_clean.save(clean_eeg_path,) #overwrite=True)
-    eeg = eeg_clean
 elif already_clean:
-    eeg = mne.io.read_raw_fif(clean_eeg_path, preload=True)
+    eeg_clean = mne.io.read_raw_fif(clean_eeg_path, preload=True)
+eeg = eeg_clean
+
+# ICA 
+if os.path.exists(ica_path):
+    ica = mne.preprocessing.read_ica(ica_path)
+else:
+    eeg_for_ica = eeg_clean.copy()
+    eeg_for_ica = eeg_for_ica.notch_filter(freqs=[60,120,180,200,240], method='fir', picks=None, notch_widths=2.0)
+    eeg_for_ica = eeg_for_ica.filter(l_freq=1.0, h_freq=100.0)
+    eeg_for_ica.set_eeg_reference('average', projection=False)
+    ica = mne.preprocessing.ICA(n_components=14, method='infomax', fit_params=dict(extended=True))
+    ica.fit(eeg_for_ica, picks='eeg')
+    labels = label_components(eeg_for_ica, ica, method='iclabel')
+    print(labels['labels'])
+    ica.exclude = [i for i in range(len(labels['labels'])) if labels['labels'][i] != 'brain']
+    ica.save(ica_path)
 
 ## Preprocessing
 
 # filter
-notch_freqs = np.arange(60, 241, 60)
-notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
-eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
+eeg = eeg.notch_filter(freqs=[60, 120, 180, 200, 240], method='fir', notch_widths=2.0, picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
 # reference
-#eeg.set_eeg_reference('average', projection=False) # WILL INSTEAD DO THIS PER ANALYSIS
+eeg.set_eeg_reference('average', projection=False)  # default unless analyses undo it
+eeg = ica.apply(eeg.copy())
 
 # extract peripheral signals
 eeg_ssep = eeg.copy()
@@ -219,7 +234,7 @@ pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 ## Spectrogram
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
-eeg_spect = eeg.copy().set_eeg_reference('average', projection=False)
+eeg_spect = eeg.copy()
 e_f = eeg_spect._data[frontal] * 1e6 # to uV
 e_p = eeg_spect._data[posterior] * 1e6 # to uV
 decim = 4
@@ -301,7 +316,7 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 
 ## Chirp
-#eeg_chirp = eeg.copy().set_eeg_reference('average', projection=False) # worked v well w/ b004
+#eeg_chirp = eeg.copy() # worked v well w/ b004, ie avg ref
 eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
 #chirp_ch_name = ['Cz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
 chirp_ch_name = ['F3', 'F4'] # worked v well w/ b004
