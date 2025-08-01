@@ -1,4 +1,9 @@
 ##
+'''
+TODO: need to tweak the pipeline for cleaning, basically to display for bad section rejection, and during that display have it be avg referenced and filtered, but then ideally I'd save a totally unfiltered and unreferenced version that just keeps those annotations. then when i load it, i do (in THIS order): filter, reference to avg, and NOT reference again
+'''
+
+##
 import numpy as np
 import pandas as pd
 import mne
@@ -98,12 +103,9 @@ elif already_clean:
 
 # filter
 notch_freqs = np.arange(60, 241, 60)
-#notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
+notch_freqs = np.concatenate([notch_freqs, notch_freqs-1, notch_freqs+1])
 eeg = eeg.notch_filter(freqs=notch_freqs, method='spectrum_fit', picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
-
-# reference
-eeg.set_eeg_reference('average')
 
 # extract peripheral signals
 eeg_ssep = eeg.copy()
@@ -114,7 +116,6 @@ ssep = eeg_ssep._data[ssep_channel]
 eeg_ssep.set_eeg_reference(['Fz'])#, 'FCz', 'Cz'])
 
 eeg_switch = eeg.copy()
-eeg_switch.set_eeg_reference('average')
 eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch'])
 switch_channel = channel_names.index('gripswitch')
 switch = eeg_switch._data[switch_channel]
@@ -220,7 +221,6 @@ axs[1].set_ylabel('% response')
 pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 
 ## Spectrogram
-eeg.set_eeg_reference('average')
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
 e_f = eeg._data[frontal] * 1e6 # to uV
@@ -307,8 +307,6 @@ pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 #chirp_ch_name = ['Fz'] #['Fz', 'Cz', 'FCz',]  # always use a list even if just one; ?F4
 chirp_ch_name = ['F3', 'F4']
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
-#eeg.set_eeg_reference('average')
-eeg.set_eeg_reference(['M1', 'M2'])
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
 level_id = t_to_phase_idx(chirp_onset_t)
@@ -397,10 +395,10 @@ ax.set_xlabel('Propofol level')
 ax.set_ylabel('Mean chirp responses (ITC)')
 
 ## Oddball
-ch_name = ['Fz',] #['FCz', 'Fz', 'Cz'] # always list
+ch_name = ['Fz']# ['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
 eeg_ob = eeg.copy()
-eeg_ob.set_eeg_reference('average')
+eeg_ob = eeg_ob.filter(l_freq=0.5, h_freq=20, fir_design='firwin', picks='eeg') # note this is on top of main loading filter as of now
 
 ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
 s_d = oddball[oddball.event.isin(['s','d'])].event.values
@@ -409,12 +407,14 @@ ob_onset = t2i(ob_events_t)
 
 n_levels = len(np.unique(level_id))
 fig, axs = pl.subplots(3, 3, figsize=(15,4),
-                       sharex=True, sharey=True,
+                       sharex='row', sharey='row',
                        gridspec_kw=dict(left=0.05, right=0.98))
 axs = axs.ravel()
 
+fig2, axs2 = pl.subplots(n_levels, 4)
+
 summary = []
-for lev,ax in zip(np.unique(level_id), axs):
+for lev,ax,ax2 in zip(np.unique(level_id), axs, axs2):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
 
@@ -423,15 +423,17 @@ for lev,ax in zip(np.unique(level_id), axs):
         np.column_stack((events_d, np.zeros_like(events_d), np.full_like(events_d, 2)))
     ]).astype(int)
     event_id = {'standard': 1, 'deviant': 2}
-
+    
+    reject_criteria = dict(eeg=150e-6)
     epochs = mne.Epochs(eeg_ob,
                         events,
                         event_id=event_id,
                         tmin=-0.100,
-                        tmax=0.500,
+                        tmax=0.400,
                         baseline=(-0.100, 0),
                         detrend=1,
                         reject_by_annotation=True,
+                        reject=reject_criteria,
                         preload=True)
     epochs = epochs.pick('eeg')
 
@@ -460,21 +462,24 @@ for lev,ax in zip(np.unique(level_id), axs):
     ax.grid(True)
 
     # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.100, 0.300  # in seconds
+    tmin_pp, tmax_pp = 0.00, 0.300  # in seconds
     evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
     evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    s_trace = evoked_s_crop.data[ch_idx].mean(axis=0) * 1e6
-    d_trace = evoked_d_crop.data[ch_idx].mean(axis=0) * 1e6
-    dif_trace = d_trace - s_trace
+    full_dif = 1e6 * (evoked_d_crop.data - evoked_s_crop.data)
+    dif_trace = full_dif[ch_idx].mean(axis=0)
     dif = np.min(dif_trace)
     latency = 1000 * ((np.argmin(dif_trace)) / fs + tmin_pp)
 
-    # Plot the topomap of these amplitudes
-    #fig_topo, ax_topo = pl.subplots(1, 1)
-    #mne.viz.plot_topomap(ptp_d_amplitudes, mean_deviant.info, axes=ax_topo,
-    #                     show=True, cmap='Reds', contours=0)
-
     summary.append([phase_levels[lev], dif, latency])
+
+    # SANDBOX: using some MNE tools to dig deeper
+    evoked_diff = mne.combine_evoked([mean_deviant, mean_standard], weights=[1, -1])
+    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz'], times=[0.0, 0.180, 0.360], title=f'level {phase_levels[lev]:0.1f}')
+    fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.pdf')
+    pl.close(fig)
+    #evoked_diff.plot_topomap(times=[0.050, 0.150, 0.250], ch_type='eeg', axes=ax2)
+
+
 ax.legend()
 
 summ = np.array(summary)
