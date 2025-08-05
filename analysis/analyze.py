@@ -413,6 +413,8 @@ ax.set_ylabel('Mean chirp responses (ITC)')
 SHUF = False # False / 'sd' / 'rand'
 ch_name = ['Fz']# ['FCz', 'Fz', 'Cz'] # always list
 ch_idx = ch_name_to_idx(ch_name)
+ob_frontal = ['Cz','FCz','Fz','C3','C4']
+ob_posterior = ['Oz','M1','M2','P3','P4']
 eeg_ob = eeg.copy()
 eeg_ob = eeg_ob.filter(l_freq=1, h_freq=20, fir_design='firwin', picks='eeg') # note this is on top of main loading filter as of now
 eeg_ob.set_eeg_reference('average', projection=False)
@@ -428,13 +430,9 @@ elif SHUF == 'rand':
     ob_onset = np.random.randint(np.min(ob_onset), np.max(ob_onset), size=ob_onset.shape)
 
 n_levels = len(np.unique(level_id))
-fig, axs = pl.subplots(3, 3, figsize=(15,4),
-                       sharex='row', sharey='row',
-                       gridspec_kw=dict(left=0.05, right=0.98))
-axs = axs.ravel()
+fig, axs = pl.subplots(1, n_levels, sharex=True, sharey=True)
 
-summary = []
-for lev,ax in zip(np.unique(level_id), axs):
+for lev, ax in zip(np.unique(level_id), axs):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
 
@@ -448,7 +446,7 @@ for lev,ax in zip(np.unique(level_id), axs):
                         events,
                         event_id=event_id,
                         tmin=-0.100,
-                        tmax=0.500,
+                        tmax=0.550,
                         baseline=(-0.050, 0),
                         detrend=1,
                         reject_by_annotation=True,
@@ -457,62 +455,31 @@ for lev,ax in zip(np.unique(level_id), axs):
 
     mean_standard = epochs['standard'].average()
     mean_deviant = epochs['deviant'].average()
-    err_standard = epochs['standard'].standard_error()
-    err_deviant = epochs['deviant'].standard_error()
 
-    # SANDBOX: using some MNE tools to dig deeper
     #evoked_diff = mne.combine_evoked([mean_deviant, mean_standard], weights=[1, -1])
-    evoked_diff = mne.combine_evoked([mean_deviant], weights=[1,]) # TODO TEMP
-    fig = evoked_diff.plot_joint(picks=['Cz','FCz','Fz','M1','M2','Oz','C3','C4'],
+    #evoked_diff = mne.combine_evoked([mean_deviant], weights=[1,])
+    evoked_diff = mne.combine_evoked([mean_standard], weights=[1,])
+
+    fig = evoked_diff.plot_joint(picks=ob_frontal + ob_posterior,
                                  times=[0.0, 0.100, 0.250],
                                  title=f'level {phase_levels[lev]:0.1f}')
     fig.savefig(f'/Users/bdd/Desktop/level_idx{lev}_ce{phase_levels[lev]:0.1f}.png')
     pl.close(fig)
-    # --
 
-    times = mean_standard.times * 1000
-
-    std = mean_standard.data[ch_idx].mean(axis=0) * 1e6
-    std_err = err_standard.data[ch_idx].mean(axis=0) * 1e6
-    dev = mean_deviant.data[ch_idx].mean(axis=0) * 1e6
-    dev_err = err_deviant.data[ch_idx].mean(axis=0) * 1e6
-    dif = dev - std
-    ax.plot(times, std, label='Standard', color='k')
-    ax.fill_between(times, std-std_err, std+std_err, alpha=0.5, lw=0, color='k')
-    ax.plot(times, dev, label='Deviant', color='red')
-    ax.fill_between(times, dev-dev_err, dev+dev_err, alpha=0.5, lw=0, color='red')
-    ax.plot(times, dif, label='Diff', ls='--', color='grey')
-
-    ax.axvline(0, color='grey', linestyle='--')
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Amplitude (µV)')
-    ax.set_title(f'{ch_name} at {phase_levels[lev]:0.1f}', fontsize=8)
-    ax.grid(True)
-
-    # Compute peak-to-peak amplitude per channel in a post-stimulus window (e.g., 20-60 ms)
-    tmin_pp, tmax_pp = 0.00, 0.300  # in seconds
-    evoked_s_crop = mean_standard.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    evoked_d_crop = mean_deviant.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
-    full_dif = 1e6 * (evoked_d_crop.data - evoked_s_crop.data)
-    dif_trace = full_dif[ch_idx].mean(axis=0)
-    dif = np.min(dif_trace)
-    latency = 1000 * ((np.argmin(dif_trace)) / fs + tmin_pp)
-
-    summary.append([phase_levels[lev], dif, latency])
-
-
-ax.legend()
-
-summ = np.array(summary)
-fig, axs = pl.subplots(1, 2)
-ax = axs[0]
-ax.scatter(summ[:,0], summ[:,1], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
-ax.set_xlabel('Propofol level')
-ax.set_ylabel('Mean oddball mmn ampl')
-ax = axs[1]
-ax.scatter(summ[:,0], summ[:,2], s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
-ax.set_xlabel('Propofol level')
-ax.set_ylabel('Mean oddball mmn latency')
+    # posterior minus frontal
+    ch_frontal = ch_name_to_idx(ob_frontal)
+    ch_posterior = ch_name_to_idx(ob_posterior)
+    sig_frontal = evoked_diff.data[ch_frontal].mean(axis=0) * 1e6
+    sig_posterior = evoked_diff.data[ch_posterior].mean(axis=0) * 1e6
+    posterofrontal = sig_posterior - sig_frontal
+    t = (np.arange(len(sig_frontal)) / fs) + epochs.tmin
+    ax.plot(t, posterofrontal, color='k')
+    ax.plot(t, sig_frontal, color='grey', lw=0.5)
+    ax.plot(t, sig_posterior, color='dimgrey', lw=0.5)
+    ax.axvline(0, color='grey', ls=':')
+    ax.set_ylabel('microvolts')
+    ax.set_xlabel('Secs from beep')
+    ax.set_title(f'{lev}')
 
 
 ## SSEP
