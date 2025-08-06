@@ -486,11 +486,15 @@ for lev, ax in zip(np.unique(level_id), axs):
 a, l = zip(*agg)
 a = np.array(a)
 l = np.array(l)
-fig, ax = pl.subplots()
+fig, ax = pl.subplots(figsize=(7,3.5))
 #ax.scatter(l, a, s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
-ax.scatter(l[prop_direction==1], a[prop_direction==1], s=150, marker='o', cmap=pl.cm.Spectral)
-ax.set_xlabel('Propofol level')
-ax.set_ylabel('Auditory-evoked response')
+l = l[prop_direction==1]
+a = a[prop_direction==1]
+a = a / max(a)
+ax.scatter(l, a, s=150, marker='o', color='slateblue')
+ax.tick_params(labelsize=25)
+#ax.set_xlabel('Propofol level')
+#ax.set_ylabel('Auditory-evoked response magnitude (normalized)')
 
 
 ## SSEP
