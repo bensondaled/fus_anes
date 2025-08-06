@@ -15,10 +15,10 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -432,7 +432,7 @@ elif SHUF == 'rand':
 
 n_levels = len(np.unique(level_id))
 fig, axs = pl.subplots(1, n_levels, sharex=True, sharey=True)
-
+agg = []
 for lev, ax in zip(np.unique(level_id), axs):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
@@ -447,7 +447,7 @@ for lev, ax in zip(np.unique(level_id), axs):
                         events,
                         event_id=event_id,
                         tmin=-0.100,
-                        tmax=0.550,
+                        tmax=0.250,
                         baseline=(-0.050, 0),
                         detrend=1,
                         reject_by_annotation=True,
@@ -473,6 +473,7 @@ for lev, ax in zip(np.unique(level_id), axs):
     sig_frontal = evoked_diff.data[ch_frontal].mean(axis=0) * 1e6
     sig_posterior = evoked_diff.data[ch_posterior].mean(axis=0) * 1e6
     posterofrontal = sig_posterior - sig_frontal
+    agg.append([posterofrontal[np.argmax(np.abs(posterofrontal))], phase_levels[lev]])
     t = (np.arange(len(sig_frontal)) / fs) + epochs.tmin
     ax.plot(t, posterofrontal, color='k')
     ax.plot(t, sig_frontal, color='grey', lw=0.5)
@@ -481,6 +482,15 @@ for lev, ax in zip(np.unique(level_id), axs):
     ax.set_ylabel('microvolts')
     ax.set_xlabel('Secs from beep')
     ax.set_title(f'{lev}')
+
+a, l = zip(*agg)
+a = np.array(a)
+l = np.array(l)
+fig, ax = pl.subplots()
+#ax.scatter(l, a, s=150, marker='o', c=prop_direction, cmap=pl.cm.Spectral)
+ax.scatter(l[prop_direction==1], a[prop_direction==1], s=150, marker='o', cmap=pl.cm.Spectral)
+ax.set_xlabel('Propofol level')
+ax.set_ylabel('Auditory-evoked response')
 
 
 ## SSEP
