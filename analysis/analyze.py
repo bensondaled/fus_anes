@@ -16,10 +16,10 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
@@ -217,6 +217,7 @@ for lev, ax in zip(np.unique(level_id), axs):
     summary.append([phase_levels[lev], np.nanmean(rts), pct_resp])
 
 summary = np.array(summary)
+np.save(f'/Users/bdd/Desktop/sqz_summ_{name}.npy', summary)
 
 lvals, rts, pcts = summary.T
 
@@ -275,20 +276,20 @@ alpha = (sp_f>=11) & (sp_f<15)
 delta = (sp_f>=0.5) & (sp_f<4)
 
 # use entire phase
-#pss = np.append(phase_starts, 1e15)
-#for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
+pss = np.append(phase_starts, 1e15)
+for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
 
 # use just the final 2 mins
-pss = np.append(phase_starts[1:], phase_starts[-1]+20*60) - 60*2
-pse = pss + 60*2
-for t0, t1, lev in zip(pss, pse, phase_levels):
+#pss = np.append(phase_starts[1:], phase_starts[-1]+20*60) - 60*2
+#pse = pss + 60*2
+#for t0, t1, lev in zip(pss, pse, phase_levels):
 
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
     chunk = sp_frontal[:, :, i0:i1]
 
     chunk = np.nanmean(chunk, axis=0)
-    chunk = nanpow2db(chunk)
+    #chunk = nanpow2db(chunk)
 
     chunk_a = chunk[alpha, :]
     chunk_d = chunk[delta, :]
@@ -345,6 +346,7 @@ ax.set_ylabel(r'$\Delta$ power (dB)')
 ax.legend()
 
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
+np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 
 ## Chirp
 #eeg_chirp = eeg.copy() # worked v well w/ b004, ie avg ref
@@ -687,7 +689,7 @@ axs[1].set_ylim([0,100])
 axs[2].set_title('RT (ms)')
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
-## Sandbox - new analyses
+## Sandbox 1 - squeeze detailed view
 
 if name == '2025-07-25_08-38-29_subject-b003':
     pump = pump.iloc[2:]
@@ -752,7 +754,108 @@ ax.set_xlabel('Minutes')
 ax.set_ylabel('Propofol level')
 fig.savefig(f'/Users/bdd/Desktop/{name}_squeeze_display.pdf')
 pl.close(fig)
-##
 
+## Sandbox 2 - comparing power across sessions
+seshs = [
+        #'/Users/bdd/Desktop/power_summ_2025-07-23_12-05-45_subject-b001.npy',
+        #'/Users/bdd/Desktop/power_summ_2025-08-05_11-52-41_subject-b001.npy',
+        '/Users/bdd/Desktop/power_summ_2025-07-30_merge_subject-b004.npy',
+        '/Users/bdd/Desktop/power_summ_2025-08-12_09-11-34_subject-b004.npy',
+        '/Users/bdd/Desktop/power_summ_2025-07-25_08-38-29_subject-b003.npy',
+        ]
+labs = [
+        'A',
+        'B',
+        'X']
+cols = [
+        'dimgrey',
+        'darkorange',
+        'darkorange',]
+lss = [
+       '-',
+       '-',
+       ':']
 
+fig, axs = pl.subplots(1, 2, figsize=(8,5))
+
+for hyster,ax in zip([1, -1], axs):
+    for sesh, col, ls, lab in zip(seshs, cols, lss, labs):
+        dat = np.load(sesh)
+        prop = dat.T[0]
+        powr = dat.T[1]
+        powr = 10*np.log10(powr / powr[0])
+        if hyster == 1:
+            prop = prop[:5]
+            powr = powr[:5]
+        elif hyster == -1:
+            prop = prop[5:]
+            powr = powr[5:]
+        ax.plot(prop, powr, color=col, marker='o', lw=1, ls=ls, label=lab)
+        
+        #sx, sy, s50 = fit_sigmoid(prop, powr, return_ec50=True, b0=0.1)
+        #m, b = np.polyfit(prop, powr, 1)
+        #sx = np.linspace(prop.min(), prop.max(), 100)
+        #sy = m * sx + b
+        #ax.plot(sx, sy, label=f'ec50: {s50:0.1f}',
+        #        color=col, ls=ls)
+
+axs[-1].invert_xaxis()
+axs[0].legend()
+
+axs[0].set_title('induction')
+axs[1].set_title('emergence')
+axs[0].set_ylabel('frontal alpha power change from baseline (dB)')
+axs[0].set_xlabel('propofol concentration')
+axs[1].set_xlabel('propofol concentration')
+
+fig.savefig('/Users/bdd/Desktop/pwr.pdf')
+pl.close(fig)
+
+## Sandbox 3 - comparing squeeze across sessions
+seshs = [
+        #'/Users/bdd/Desktop/sqz_summ_2025-07-23_12-05-45_subject-b001.npy',
+        #'/Users/bdd/Desktop/sqz_summ_2025-08-05_11-52-41_subject-b001.npy',
+        '/Users/bdd/Desktop/sqz_summ_2025-07-30_merge_subject-b004.npy',
+        '/Users/bdd/Desktop/sqz_summ_2025-08-12_09-11-34_subject-b004.npy',
+        '/Users/bdd/Desktop/sqz_summ_2025-07-25_08-38-29_subject-b003.npy',
+        ]
+labs = [
+        'A',
+        'B',
+        'X']
+cols = [
+        'dimgrey',
+        'darkorange',
+        'darkorange',]
+lss = [
+       '-',
+       '-',
+       ':']
+
+fig, axs = pl.subplots(1, 2, figsize=(8,5))
+
+for hyster,ax in zip([1, -1], axs):
+    for sesh, col, ls, lab in zip(seshs, cols, lss, labs):
+        dat = np.load(sesh)
+        prop = dat.T[0]
+        pct = dat.T[2]
+        if hyster == 1:
+            prop = prop[:5]
+            pct = pct[:5]
+        elif hyster == -1:
+            prop = prop[5:]
+            pct = pct[5:]
+        ax.plot(prop, pct, color=col, marker='o', lw=1, ls=ls, label=lab)
+
+axs[-1].invert_xaxis()
+axs[0].legend()
+
+axs[0].set_title('induction')
+axs[1].set_title('emergence')
+axs[0].set_ylabel('% response')
+axs[0].set_xlabel('propofol concentration')
+axs[1].set_xlabel('propofol concentration')
+
+fig.savefig('/Users/bdd/Desktop/sq.pdf')
+pl.close(fig)
 ##
