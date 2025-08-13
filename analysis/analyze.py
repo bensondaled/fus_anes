@@ -5,6 +5,7 @@ import mne
 import os
 import json
 import matplotlib.pyplot as pl
+from matplotlib.transforms import blended_transform_factory as blend
 pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 from mne_icalabel import label_components
@@ -16,9 +17,10 @@ from threshs import switch_thresh, ssep_thresh
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -33,6 +35,7 @@ prop_direction_markers = {1:'>', -1:'<'}
 
 ## Load
 with pd.HDFStore(session_path, 'r') as h:
+    sconfig = h.config
     eeg = h.eeg
     bl_eyes = h.bl_eyes
     markers = h.markers
@@ -41,9 +44,13 @@ with pd.HDFStore(session_path, 'r') as h:
     chirp = h.chirp
     if 'tci_cmd' in h:
         tci_cmd = h.tci_cmd
+        pump = h.pump
     else:
         tci_cmd = None
+        pump = None
     print(h.keys())
+
+sconfig = json.loads(sconfig.iloc[0])
 
 true_eeg_time = eeg.index.values
 nominal_fs = 500.0
@@ -105,7 +112,7 @@ else:
     eeg_for_ica = eeg_for_ica.notch_filter(freqs=[60,120,180,200,240], method='fir', picks=None, notch_widths=2.0)
     eeg_for_ica = eeg_for_ica.filter(l_freq=1.0, h_freq=100.0)
     eeg_for_ica.set_eeg_reference('average', projection=False)
-    ica = mne.preprocessing.ICA(n_components=14, method='infomax', fit_params=dict(extended=True))
+    ica = mne.preprocessing.ICA(n_components=13, method='infomax', fit_params=dict(extended=True))
     ica.fit(eeg_for_ica, picks='eeg')
     labels = label_components(eeg_for_ica, ica, method='iclabel')
     print(labels['labels'])
@@ -113,7 +120,6 @@ else:
     ica.save(ica_path)
 
 ## Preprocessing
-
 # filter
 eeg = eeg.notch_filter(freqs=[60, 120, 180, 200, 240], method='fir', notch_widths=2.0, picks=None)
 eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
@@ -265,26 +271,39 @@ for ps, plev in zip(phase_starts, phase_levels):
             ha='center', va='center')
 
 summary = []
-alpha = (sp_f>=8) & (sp_f<15)
+alpha = (sp_f>=11) & (sp_f<15)
 delta = (sp_f>=0.5) & (sp_f<4)
-pss = np.append(phase_starts, 1e15)
-for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
+
+# use entire phase
+#pss = np.append(phase_starts, 1e15)
+#for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
+
+# use just the final 2 mins
+pss = np.append(phase_starts[1:], phase_starts[-1]+20*60) - 60*2
+pse = pss + 60*2
+for t0, t1, lev in zip(pss, pse, phase_levels):
+
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
     chunk = sp_frontal[:, :, i0:i1]
 
+    chunk = np.nanmean(chunk, axis=0)
     chunk = nanpow2db(chunk)
 
-    chunk_a = chunk[:, alpha, :]
-    chunk_d = chunk[:, delta, :]
+    chunk_a = chunk[alpha, :]
+    chunk_d = chunk[delta, :]
+
     mean_a = np.nanmedian(chunk_a)
     mean_d = np.nanmedian(chunk_d)
-    summary.append([lev, mean_a, mean_d])
+
+    cent_a = np.nanmedian(sp_f[alpha][np.nanargmax(chunk_a, axis=0)])
+
+    summary.append([lev, mean_a, mean_d, cent_a])
 summary = np.array(summary)
 
-lvals, apows, dpows = summary.T
+lvals, apows, dpows, acents = summary.T
 
-fig, axs = pl.subplots(1, 2, gridspec_kw=dict(wspace=0.5), figsize=(9,5))
+fig, axs = pl.subplots(1, 3, gridspec_kw=dict(wspace=0.5), figsize=(9,5))
 
 for prd in [1,-1]:
     m = prop_direction_markers[prd]
@@ -298,8 +317,12 @@ for prd in [1,-1]:
     ax.scatter(lv, ap, s=150, marker=m, color=c)
     sx, sy, s50 = fit_sigmoid(lv, ap, return_ec50=True, b0=0.1)
     ax.plot(sx, sy, color=c, label=f'ec50: {s50:0.1f}')
-
+    
     ax = axs[1]
+    ac = acents[use]
+    ax.scatter(lv, ac, s=150, marker=m, color=c)
+
+    ax = axs[2]
     dp = dpows[use]
     ax.scatter(lv, dp, s=150, marker=m, color=c)
     sx, sy, s50 = fit_sigmoid(lv, dp, return_ec50=True, b0=0.5)
@@ -308,9 +331,15 @@ for prd in [1,-1]:
 ax = axs[0]
 ax.set_xlabel('Propofol level')
 ax.set_ylabel(r'$\alpha$ power (dB)')
+ax.set_ylim([-6,11])
 ax.legend()
 
 ax = axs[1]
+ax.set_xlabel('Propofol level')
+ax.set_ylabel(r'$\alpha$ center')
+ax.set_ylim([8,14])
+
+ax = axs[2]
 ax.set_xlabel('Propofol level')
 ax.set_ylabel(r'$\Delta$ power (dB)')
 ax.legend()
@@ -382,7 +411,7 @@ for eid, ax in zip(eids, axs):
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.4,
+              vmax=0.3,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
@@ -590,7 +619,8 @@ axs[1].set_ylabel('Latency')
 
 
 ## Vigilance
-data_file = '/Users/bdd/data/fus_anes/2025-07-30_vigilance_b004.txt'
+#data_file = '/Users/bdd/data/fus_anes/2025-07-30_vigilance_b004.txt'
+data_file = '/Users/bdd/data/fus_anes/2025-08-12_vigilance_b004.txt'
 with open(data_file, 'r') as f:
     vdata = f.readlines()
 vdata = [json.loads(l) for l in vdata]
@@ -622,7 +652,8 @@ fig, ax = pl.subplots(1, sharex=True)
 for rep in range(n_reps):
     use = (pvt.rep == rep) & (pvt.note != 'early')
     rt_ = pvt[use].rt.values
-    ax.hist(1000*rt_, histtype='step', label=rep, density=True)
+    lab = f'{rep} - {1000*np.median(rt_):0.0f}'
+    ax.hist(1000*rt_, histtype='step', label=lab, density=True)
 ax.set_xlabel('RT (ms)')
 ax.legend()
 
@@ -656,31 +687,72 @@ axs[1].set_ylim([0,100])
 axs[2].set_title('RT (ms)')
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
-## EEG artifact cleaning sandbox
+## Sandbox - new analyses
 
-#ica = ICA(n_components=13)
-#ica.fit(eeg)
-#ica.plot_components()
-#ica.plot_sources(eeg.pick_types(eeg=True))
-#
-#ica.exclude = []
-#ica.apply(eeg_ica)
-#
-## Find EOG (eye blink) components
-#eog_chans = ['F3','Fz','F4']
-#eog_epochs = create_eog_epochs(eeg_ica, ch_name=eog_chans)
-#eog_inds, eog_scores = ica.find_bads_eog(eog_epochs, ch_name=eog_chans)
-#ica.exclude.extend(eog_inds)
-#
-## Find ECG (heartbeat) components
-#ecg_epochs = create_ecg_epochs(eeg_ica)
-#ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
-#ica.exclude.extend(ecg_inds)
-#
-#eeg_clean = ica.apply(eeg_ica.copy())
-#eeg_ica.plot(title='Before cleaning', duration=30)
-#eeg_clean.plot(title='After cleaning', duration=30)
+if name == '2025-07-25_08-38-29_subject-b003':
+    pump = pump.iloc[2:]
 
+from fus_anes.tci import TCI_Propofol as TCI
+t = TCI(age=sconfig['age'],
+        sex=sconfig['sex'],
+        weight=sconfig['weight'],
+        height=sconfig['height'])
+t.infuse(0)
+starttime = pump.index.values[0] - 15*60
+endtime = tci_cmd.index.values[(tci_cmd.ce_target==0.4) & (tci_cmd.kind=='goto')][0] + 15 * 60
+sec = starttime
+pidx = 0
+lev = []
+while sec < endtime:
+    while pidx<len(pump) and sec >= pump.index.values[pidx]:
+        rate = pump.iloc[pidx].rate
+        rate = 10000 * rate / sconfig['weight']
+        t.infuse(rate)
+        t.wait(1)
+        pidx += 1
+        sec += 1
+        lev.append(t.level)
+    t.wait(1)
+    sec += 1
+    lev.append(t.level)
+for _ in range(60*5):
+    t.wait(1)
+    lev.append(t.level)
+
+lev = np.array(lev)
+fig, ax = pl.subplots(figsize=(15,9))
+ax.plot(np.arange(len(lev))[::5]/60, lev[::5], color='k', lw=2)
+
+sq_cmd = sq_onset - starttime
+sq_did = squeeze_times - starttime
+for c in sq_cmd:
+    ax.axvline(c/60, color='grey', ls=':', alpha=0.5)
+ax.axvline(c/60, color='k', ls=':', alpha=0.5, label='Squeeze command')
+for d in sq_did:
+    ax.axvline(d/60, color='red', ls=':', alpha=0.5)
+ax.axvline(d/60, color='red', ls=':', alpha=0.5, label='Squeezed')
+
+pumpds = pump.copy()
+pumpds['tstamp'] = pumpds.index.values
+pumpds = pumpds.groupby(np.arange(len(pumpds)) // 8).median()
+pumprate = pumpds.rate.values
+pumpidx = pumpds.tstamp.values
+mkm = 10000 * pumprate / sconfig['weight']
+for t, m in zip(pumpidx, mkm):
+    ax.text((t-starttime)/60, 1.02, f'{m:0.0f}',
+            fontsize=6,
+            rotation=90,
+            #ha='left',
+            #va='bottom',
+            transform=blend(ax.transData, ax.transAxes))
+
+ax.legend()
+ax.set_xlim([0, 160])
+ax.set_xlabel('Minutes')
+ax.set_ylabel('Propofol level')
+fig.savefig(f'/Users/bdd/Desktop/{name}_squeeze_display.pdf')
+pl.close(fig)
+##
 
 
 ##
