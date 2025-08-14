@@ -988,6 +988,7 @@ axs[1].set_ylabel('Latency')
 
 
 ## Vigilance
+#data_file = '/Users/bdd/data/fus_anes/2025-07-25_vigilance_b003.txt'
 #data_file = '/Users/bdd/data/fus_anes/2025-07-30_vigilance_b004.txt'
 data_file = '/Users/bdd/data/fus_anes/2025-08-12_vigilance_b004.txt'
 with open(data_file, 'r') as f:
