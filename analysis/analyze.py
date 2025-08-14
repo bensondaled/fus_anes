@@ -5,22 +5,24 @@ import mne
 import os
 import json
 import matplotlib.pyplot as pl
+from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
 pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 from mne_icalabel import label_components
 
-from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid
+from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne
 from fus_anes.constants import MONTAGE as channel_names
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
+#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -241,9 +243,10 @@ axs[1].set_ylabel('% response')
 pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 
 ## Spectrogram
+eeg_spect = eeg.copy()
+eeg_spect.set_eeg_reference(['Cz'])
 frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
 posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
-eeg_spect = eeg.copy()
 e_f = eeg_spect._data[frontal] * 1e6 # to uV
 e_p = eeg_spect._data[posterior] * 1e6 # to uV
 decim = 4
@@ -348,6 +351,70 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 
+## Spectrogram v2
+s_win_size = 20.0 # secs
+n_topo = 10
+
+eeg_spect = eeg.copy().pick('eeg')
+#eeg_spect.set_eeg_reference(['Cz'])
+eeg_spect = eeg_spect.drop_channels(eeg.info['bads'])
+eeg_spect = eeg_spect.resample(100)
+
+# nan bad segments
+sfreq = eeg_spect.info['sfreq']
+mask = np.ones(eeg_spect.n_times, dtype=np.float32)
+for ann in eeg_spect.annotations:
+    desc = ann['description']
+    onset = ann['onset']
+    duration = ann['duration']
+    if desc.upper().startswith("BAD"):
+        start = int(onset * sfreq)
+        stop = int((onset + duration) * sfreq)
+        mask[start:stop] = np.nan
+mask = mask[:, None]
+
+# compute spect
+in_data = eeg_spect._data.T * 1e6 * mask
+spect, sp_t, sp_f = mts(in_data,
+                        window_size=s_win_size,
+                        window_step=s_win_size,
+                        fs=eeg_spect.info['sfreq'])
+sp = np.nanmedian(spect, axis=0)
+sp = nanpow2db(sp)
+#spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
+#sp2 = np.nanmedian(spect2, axis=0)
+
+gs = GridSpec(2, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
+              width_ratios=[1]*n_topo + [0.1])
+fig = pl.figure(figsize=(15,8))
+ax = fig.add_subplot(gs[1,:-1])
+vmin, vmax = np.nanpercentile(sp, [1, 95])
+pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
+             vmin=vmin, vmax=vmax,
+             cmap=pl.cm.rainbow)
+cax = fig.add_subplot(gs[1,-1])
+cbar = pl.colorbar(pcm, cax=cax, shrink=0.5, label='Power (dB)')
+ax.set_xlabel('Time (minutes)')
+ax.set_ylabel('Frequency (Hz)')
+
+# and topo
+alpha_band = (8, 14)
+alpha_idx = np.where((sp_f >= alpha_band[0]) & (sp_f <= alpha_band[1]))[0]
+
+t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
+for i_topo in range(n_topo):
+    idx = t_idxs[i_topo]
+    start_idx = idx[0]
+    end_idx = idx[-1]
+
+    alpha_power = np.nanmean(spect[:, alpha_idx, start_idx:end_idx], axis=(1, 2))
+
+    ax = fig.add_subplot(gs[0, i_topo])
+    mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False)
+
+    if i_topo == 0:
+        ax.set_ylabel('Alpha power')
+
 ## Chirp
 #eeg_chirp = eeg.copy() # worked v well w/ b004, ie avg ref
 eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
@@ -413,7 +480,7 @@ for eid, ax in zip(eids, axs):
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.3,
+              vmax=0.2,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
