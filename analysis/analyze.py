@@ -210,77 +210,13 @@ def t_to_phase_level(t):
 
 ## ---- Analyses
 
-## Squeeze
-
-fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
-time = eeg_time - eeg_time[0]
-ax.plot(time, switch, color='k')
-
-sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values
-for t in sq_onset:
-    ax.axvline(t-eeg_time[0], color='grey')
-ax.axvline(t-eeg_time[0], color='grey', label='Squeeze command')
-
-press_idx = detect_switch(np.abs(switch), switch_thresh[name])
-squeeze_times = np.array([eeg_time[i] for i in press_idx])
-for idx in press_idx:
-    ax.axvline(time[idx], color='pink')
-ax.axvline(time[idx], color='pink', label='Detected squeeze')
-
-ax.legend()
-
-level_id = t_to_phase_idx(sq_onset)
-fig, axs = pl.subplots(1, len(np.unique(level_id)))
-summary = []
-for lev, ax in zip(np.unique(level_id), axs):
-    max_lag = 1.0 # secs
-    rts = []
-    sq_lev = sq_onset[level_id == lev]
-    for cmd_idx, cmd_t in enumerate(sq_lev):
-        candidates = squeeze_times[squeeze_times > cmd_t]
-        candidates = candidates[candidates - cmd_t <= max_lag]
-        if cmd_idx < len(sq_lev)-1: # there was no next command in that time
-            candidates = candidates[candidates <= sq_lev[cmd_idx+1]]
-        rt = candidates[0] - cmd_t if len(candidates) else np.nan
-        rts.append(float(rt) * 1000)
-    rts = np.array(rts)
-    pct_resp = 100.0 * np.nanmean(~np.isnan(rts))
-
-    ax.hist(rts[~np.isnan(rts)], bins=15, color='grey')
-    ax.set_title(f'% resp: {pct_resp:0.0f}%, lev {phase_levels[lev]:0.2f}', fontsize=8)
-    ax.set_xlabel('RT (ms)')
-
-    summary.append([phase_levels[lev], np.nanmean(rts), pct_resp])
-
-summary = np.array(summary)
-np.save(f'/Users/bdd/Desktop/sqz_summ_{name}.npy', summary)
-
-lvals, rts, pcts = summary.T
-
-fig, axs = pl.subplots(1, 2, gridspec_kw=dict(wspace=0.5))
-
-for prd in [1,-1]:
-    m = prop_direction_markers[prd]
-    c = prop_direction_cols[prd]
-
-    use = prop_direction == prd
-    lv = lvals[use]
-
-    axs[0].scatter(lv, rts[use], color=c, s=150, marker=m) # rt
-    axs[1].plot(lv, pcts[use],  color=c, markersize=10, marker=m) # % resp
-
-axs[0].set_xlabel('Propofol level')
-axs[1].set_xlabel('Propofol level')
-axs[0].set_ylabel('RT')
-axs[1].set_ylabel('% response')
-
-pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
-
 ## Summary with spectrogram
-total_secs = eeg_time[-1]-eeg_time[0]
+summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
+summary_end_time = tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
+total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60
 s_win_size = 20.0 # secs
-n_topo = 15
+n_topo = 10
 
 eeg_spect = eeg.copy().pick('eeg')
 #eeg_spect.set_eeg_reference(['Cz'])
@@ -306,22 +242,28 @@ spect, sp_t, sp_f = mts(in_data,
                         window_size=s_win_size,
                         window_step=s_win_size,
                         fs=eeg_spect.info['sfreq'])
+keep = (sp_f <= 30) & (sp_f > 0.5) # max frequency to show/analyze
+spect = spect[:,keep,:]
+sp_f = sp_f[keep]
 sp = np.nanmedian(spect, axis=0)
+
 sp = nanpow2db(sp)
 #spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
 #sp2 = np.nanmedian(spect2, axis=0)
+def spect_t2i(t):
+    return np.argmin(np.abs(sp_t - t))
 
-## display the summaries
+## display the summary
 
-gs = GridSpec(4, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
+gs = GridSpec(5, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
               width_ratios=[1]*n_topo + [0.1],
-              height_ratios=[2,2,3,3],
+              height_ratios=[2,2,3,2,3],
               hspace=0.4)
-fig = pl.figure(figsize=(15,8))
+fig = pl.figure(figsize=(11,8))
 
 # show propofol ce
 ax = fig.add_subplot(gs[0,:-1])
-ax.plot((ce_time-eeg_time[0])/60, ce_vals, color='k', lw=3)
+ax.plot((ce_time-summary_start_time)/60, ce_vals, color='k', lw=3)
 #ax.set_xlabel('Time (minutes)')
 ax.set_ylabel('Propofol\nlevel')
 ax.set_yticks(np.arange(0, 3.5, 1.0))
@@ -329,20 +271,20 @@ ax.set_xlim([0, total_mins])
 ax.grid(True)
 
 # show spect
-ax = fig.add_subplot(gs[3,:-1])
-vmin, vmax = np.nanpercentile(sp, [1, 95])
+ax = fig.add_subplot(gs[4,:-1])
+vmin, vmax = np.nanpercentile(sp, [5, 95])
 pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
              vmin=vmin, vmax=vmax,
              cmap=pl.cm.rainbow)
-cax = fig.add_subplot(gs[3,-1])
+cax = fig.add_subplot(gs[4,-1])
 cbar = pl.colorbar(pcm, cax=cax, shrink=0.5, label='Power (dB)')
 ax.set_xlabel('Time (minutes)')
 ax.set_ylabel('Frequency (Hz)')
 ax.set_xlim([0, total_mins])
 
 # show topo
-alpha = (sp_f>=11) & (sp_f<15)
-delta = (sp_f>=0.5) & (sp_f<4)
+alpha = (sp_f>=8) & (sp_f<14)
+delta = (sp_f>=0.8) & (sp_f<4)
 
 t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
 for i_topo in range(n_topo):
@@ -358,16 +300,50 @@ for i_topo in range(n_topo):
     if i_topo == 0:
         ax.set_ylabel('Alpha power')
 
-# time-chunked measures
-chunk_dt = 60
+# show alpha and delta numerically
+chunk_dt = 60*5
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
+is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
+response_traj = []
+for t0 in time_chunks:
+    t1 = t0 + chunk_dt
+    i0 = spect_t2i(t0)
+    i1 = spect_t2i(t1)
+    fspect = spect[is_frontal, ...]
+    alpha_power = np.nanmean(fspect[:, alpha, i0:i1+1], axis=(0, 1, 2)) # NOTE frontal
+    delta_power = np.nanmean(spect[:, delta, i0:i1+1], axis=(0, 1, 2))
+    response_traj.append([t0+chunk_dt//2, alpha_power, delta_power])
+response_traj = np.array(response_traj)
+ax = fig.add_subplot(gs[3, :-1])
+t, a, d = response_traj.T
+ax.plot(t/60, a, color='indianred', lw=1.5)
+tax = ax.twinx()
+tax.plot(t/60, d, color='indigo', lw=1.5)
+ax.set_xlim([0, total_mins])
+ax.set_ylabel('Power (dB)')
+#ax.set_xlabel('Time (minutes)')
+ax.tick_params(axis='y', labelcolor='indianred')
+tax.tick_params(axis='y', labelcolor='indigo')
+ax.spines['right'].set_visible(True)
+ax.text(0.9, 0.98, 'Frontal alpha', fontsize=10,
+        color='indianred',
+        ha='left',
+        va='center',
+        transform=ax.transAxes)
+ax.text(0.9, 0.78, 'Delta', fontsize=10,
+        color='indigo',
+        ha='left',
+        va='center',
+        transform=ax.transAxes)
 
 # show squeeze
+chunk_dt = 60
+time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
-sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values - eeg_time[0]
+sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values - summary_start_time
 press_idx = detect_switch(np.abs(switch), switch_thresh[name])
-squeeze_times = np.array([eeg_time[i] for i in press_idx]) - eeg_time[0]
+squeeze_times = np.array([eeg_time[i] for i in press_idx]) - summary_start_time
 for t0 in time_chunks:
     t1 = t0 + chunk_dt
     sq_lev = sq_onset[(sq_onset>=t0) & (sq_onset<t1)]
@@ -394,10 +370,10 @@ ax.set_xlabel('Time (minutes)')
 ax.set_yticks([0, 50, 100])
 ax.grid(axis='y')
 
+fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
+
 #-- spect summary analyses
 '''
-def spect_t2i(t):
-    return np.argmin(np.abs(sp_t - t))
 is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
 is_frontal[:] = True # TEMP TODO, maybe keep? helps SNR
 
@@ -479,6 +455,71 @@ pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 '''
 
+## Squeeze
+
+fig,ax = pl.subplots(figsize=(8,1.5), gridspec_kw=dict(bottom=0.2))
+time = eeg_time - eeg_time[0]
+ax.plot(time, switch, color='k')
+
+sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values
+for t in sq_onset:
+    ax.axvline(t-eeg_time[0], color='grey')
+ax.axvline(t-eeg_time[0], color='grey', label='Squeeze command')
+
+press_idx = detect_switch(np.abs(switch), switch_thresh[name])
+squeeze_times = np.array([eeg_time[i] for i in press_idx])
+for idx in press_idx:
+    ax.axvline(time[idx], color='pink')
+ax.axvline(time[idx], color='pink', label='Detected squeeze')
+
+ax.legend()
+
+level_id = t_to_phase_idx(sq_onset)
+fig, axs = pl.subplots(1, len(np.unique(level_id)))
+summary = []
+for lev, ax in zip(np.unique(level_id), axs):
+    max_lag = 1.0 # secs
+    rts = []
+    sq_lev = sq_onset[level_id == lev]
+    for cmd_idx, cmd_t in enumerate(sq_lev):
+        candidates = squeeze_times[squeeze_times > cmd_t]
+        candidates = candidates[candidates - cmd_t <= max_lag]
+        if cmd_idx < len(sq_lev)-1: # there was no next command in that time
+            candidates = candidates[candidates <= sq_lev[cmd_idx+1]]
+        rt = candidates[0] - cmd_t if len(candidates) else np.nan
+        rts.append(float(rt) * 1000)
+    rts = np.array(rts)
+    pct_resp = 100.0 * np.nanmean(~np.isnan(rts))
+
+    ax.hist(rts[~np.isnan(rts)], bins=15, color='grey')
+    ax.set_title(f'% resp: {pct_resp:0.0f}%, lev {phase_levels[lev]:0.2f}', fontsize=8)
+    ax.set_xlabel('RT (ms)')
+
+    summary.append([phase_levels[lev], np.nanmean(rts), pct_resp])
+
+summary = np.array(summary)
+np.save(f'/Users/bdd/Desktop/sqz_summ_{name}.npy', summary)
+
+lvals, rts, pcts = summary.T
+
+fig, axs = pl.subplots(1, 2, gridspec_kw=dict(wspace=0.5))
+
+for prd in [1,-1]:
+    m = prop_direction_markers[prd]
+    c = prop_direction_cols[prd]
+
+    use = prop_direction == prd
+    lv = lvals[use]
+
+    axs[0].scatter(lv, rts[use], color=c, s=150, marker=m) # rt
+    axs[1].plot(lv, pcts[use],  color=c, markersize=10, marker=m) # % resp
+
+axs[0].set_xlabel('Propofol level')
+axs[1].set_xlabel('Propofol level')
+axs[0].set_ylabel('RT')
+axs[1].set_ylabel('% response')
+
+pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 
 ## Chirp
 #eeg_chirp = eeg.copy() # worked v well w/ b004, ie avg ref
