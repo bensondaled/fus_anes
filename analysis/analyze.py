@@ -276,7 +276,9 @@ axs[1].set_ylabel('% response')
 
 pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 
-## Spectrogram
+## Summary with spectrogram
+total_secs = eeg_time[-1]-eeg_time[0]
+total_mins = total_secs / 60
 s_win_size = 20.0 # secs
 n_topo = 15
 
@@ -309,31 +311,36 @@ sp = nanpow2db(sp)
 #spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
 #sp2 = np.nanmedian(spect2, axis=0)
 
-gs = GridSpec(3, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
+## display the summaries
+
+gs = GridSpec(4, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
               width_ratios=[1]*n_topo + [0.1],
-              height_ratios=[2,3,3])
+              height_ratios=[2,2,3,3],
+              hspace=0.4)
 fig = pl.figure(figsize=(15,8))
 
+# show propofol ce
 ax = fig.add_subplot(gs[0,:-1])
-ax.plot((ce_time-eeg_time[0])/60, ce_vals, color='k')
-ax.set_xlabel('Time (minutes)')
+ax.plot((ce_time-eeg_time[0])/60, ce_vals, color='k', lw=3)
+#ax.set_xlabel('Time (minutes)')
 ax.set_ylabel('Propofol\nlevel')
-ax.set_yticks(np.arange(0, 3.5, 0.5))
-ax.set_xlim([0, (eeg_time[-1]-eeg_time[0])/60])
+ax.set_yticks(np.arange(0, 3.5, 1.0))
+ax.set_xlim([0, total_mins])
 ax.grid(True)
 
-ax = fig.add_subplot(gs[2,:-1])
+# show spect
+ax = fig.add_subplot(gs[3,:-1])
 vmin, vmax = np.nanpercentile(sp, [1, 95])
 pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
              vmin=vmin, vmax=vmax,
              cmap=pl.cm.rainbow)
-cax = fig.add_subplot(gs[2,-1])
+cax = fig.add_subplot(gs[3,-1])
 cbar = pl.colorbar(pcm, cax=cax, shrink=0.5, label='Power (dB)')
 ax.set_xlabel('Time (minutes)')
 ax.set_ylabel('Frequency (Hz)')
-ax.set_xlim([0, (eeg_time[-1]-eeg_time[0])/60])
+ax.set_xlim([0, total_mins])
 
-# and topo
+# show topo
 alpha = (sp_f>=11) & (sp_f<15)
 delta = (sp_f>=0.5) & (sp_f<4)
 
@@ -345,14 +352,50 @@ for i_topo in range(n_topo):
 
     alpha_power = np.nanmean(spect[:, alpha, start_idx:end_idx], axis=(1, 2))
 
-    ax = fig.add_subplot(gs[1, i_topo])
+    ax = fig.add_subplot(gs[2, i_topo])
     mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False)
 
     if i_topo == 0:
         ax.set_ylabel('Alpha power')
 
-#-- spect summary analyses
+# time-chunked measures
+chunk_dt = 60
+time_chunks = np.arange(0, total_secs+1, chunk_dt)
 
+# show squeeze
+response_traj = []
+max_lag = 1.0 # secs
+sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values - eeg_time[0]
+press_idx = detect_switch(np.abs(switch), switch_thresh[name])
+squeeze_times = np.array([eeg_time[i] for i in press_idx]) - eeg_time[0]
+for t0 in time_chunks:
+    t1 = t0 + chunk_dt
+    sq_lev = sq_onset[(sq_onset>=t0) & (sq_onset<t1)]
+    rts = []
+    for cmd_idx, cmd_t in enumerate(sq_lev):
+        candidates = squeeze_times[squeeze_times > cmd_t]
+        candidates = candidates[candidates - cmd_t <= max_lag]
+        if cmd_idx < len(sq_lev)-1: # there was no next command in that time
+            candidates = candidates[candidates <= sq_lev[cmd_idx+1]]
+        rt = candidates[0] - cmd_t if len(candidates) else np.nan
+        rts.append(float(rt) * 1000)
+    rts = np.array(rts)
+    pct_resp = 100.0 * np.nanmean(~np.isnan(rts))
+    response_traj.append([t0+chunk_dt//2, pct_resp])
+response_traj = np.array(response_traj)
+ax = fig.add_subplot(gs[1, :-1])
+rshow = response_traj.T[1]
+rfilled = pd.Series(rshow).ffill()
+ax.plot(response_traj.T[0]/60, rfilled, color='purple', lw=3, ls=':')
+ax.plot(response_traj.T[0]/60, rshow, color='purple', lw=3)
+ax.set_xlim([0, total_mins])
+ax.set_ylabel('% command\nfollowing')
+ax.set_xlabel('Time (minutes)')
+ax.set_yticks([0, 50, 100])
+ax.grid(axis='y')
+
+#-- spect summary analyses
+'''
 def spect_t2i(t):
     return np.argmin(np.abs(sp_t - t))
 is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
@@ -434,6 +477,7 @@ ax.legend()
 
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
+'''
 
 
 ## Chirp
