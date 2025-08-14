@@ -212,7 +212,7 @@ def t_to_phase_level(t):
 
 ## Summary with spectrogram
 summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
-summary_end_time = tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
+summary_end_time = summary_start_time + 8800 #tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
 total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60
 s_win_size = 20.0 # secs
@@ -253,13 +253,141 @@ sp = nanpow2db(sp)
 def spect_t2i(t):
     return np.argmin(np.abs(sp_t - t))
 
+# prep the chirp data
+eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
+chirp_ch_name = ['F3', 'F4'] 
+chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
+
+chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
+level_id = t_to_phase_idx(chirp_onset_t)
+chirp_onset = t2i(chirp_onset_t)
+events = np.array([[int(idx), 0, lid] for idx, lid in zip(chirp_onset, level_id)])
+event_id = {f'{phase_levels[x]:0.1f}':x for x in np.unique(level_id)}
+
+epochs = mne.Epochs(eeg_chirp,
+                    events,
+                    event_id=event_id,
+                    tmin=-0.2, tmax=0.600,
+                    baseline=(-0.2, 0),
+                    detrend=1,
+                    reject_by_annotation=True,
+                    preload=True)
+epochs = epochs.pick('eeg')  # or just use all: comment this out
+
+frequencies = np.linspace(25, 55, 35)
+n_cycles = frequencies / 2.0  # higher freqs need more cycles
+
+n_levels = len(event_id)
+eids = list(event_id.keys())
+chirps = []
+for eid in eids:
+    epochs_cond = epochs[eid]
+    power, itc = epochs_cond.compute_tfr(method='morlet',
+                                        freqs=frequencies,
+                                        n_cycles=n_cycles,
+                                        use_fft=True,
+                                        return_itc=True,
+                                        average=True,
+                                         #decim=2,
+                                        )
+
+    mean_to_show = np.mean(np.abs(itc.data[chirp_ch_idx, :, :]), axis=0) 
+    chirps.append([float(eid), mean_to_show])
+
+
+# prep the AEP (oddball) data
+ob_frontal = ['Cz','FCz','Fz','C3','C4']
+ob_posterior = ['Oz','M1','M2','P3','P4']
+ch_frontal = ch_name_to_idx(ob_frontal)
+ch_posterior = ch_name_to_idx(ob_posterior)
+eeg_ob = eeg.copy()
+eeg_ob = eeg_ob.filter(l_freq=1, h_freq=20, fir_design='firwin', picks='eeg') # note this is on top of main loading filter as of now
+eeg_ob.set_eeg_reference('average', projection=False)
+
+ob_events_t = oddball[oddball.event.isin(['s','d'])].onset_ts.values
+s_d = oddball[oddball.event.isin(['s','d'])].event.values.copy()
+level_id = t_to_phase_idx(ob_events_t)
+ob_onset = t2i(ob_events_t)
+
+n_levels = len(np.unique(level_id))
+oddballs = []
+for lev in np.unique(level_id):
+    events_s = ob_onset[(level_id == lev) & (s_d == 's')]
+    events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
+
+    events = np.concatenate([
+        np.column_stack((events_s, np.zeros_like(events_s), np.ones_like(events_s))),
+        np.column_stack((events_d, np.zeros_like(events_d), np.full_like(events_d, 2)))
+    ]).astype(int)
+    event_id = {'standard': 1, 'deviant': 2}
+    
+    epochs = mne.Epochs(eeg_ob,
+                        events,
+                        event_id=event_id,
+                        tmin=-0.100,
+                        tmax=0.250,
+                        baseline=(-0.050, 0),
+                        detrend=1,
+                        reject_by_annotation=True,
+                        preload=True)
+    epochs = epochs.pick('eeg')
+
+    mean_standard = epochs['standard'].average()
+    mean_deviant = epochs['deviant'].average()
+
+    evoked = mne.combine_evoked([mean_standard], weights=[1,])
+    sig_frontal = evoked.data[ch_frontal].mean(axis=0) * 1e6
+    sig_posterior = evoked.data[ch_posterior].mean(axis=0) * 1e6
+    oddballs.append([phase_levels[lev], sig_frontal, sig_posterior])
+
+# prepare ssep
+onset_idx = detect_switch(np.abs(ssep), ssep_thresh[name], min_duration=1)
+onset_t = np.array([eeg_time[i] for i in onset_idx])
+
+# filter to include only those inside manually marked bounds of ssep testing made during session
+bounds = markers[markers.text.str.startswith('ssep')]
+bs = bounds.text.str.strip().str.replace('ssep ','').values
+assert np.all(bs[0::2] == 'start')
+assert np.all(bs[1::2] == 'stop')
+bounds = np.array(list(zip(bounds.t.values[0::2], bounds.t.values[1::2])))
+keep = np.array([np.any([((t>=b0) & (t<=b1)) for b0,b1 in bounds]) for t in onset_t])
+onset_t = onset_t[keep]
+onset_idx = onset_idx[keep]
+
+inferred_ssep_rate = 1/np.median(np.diff(onset_t))
+print(f'Inferred rate of {inferred_ssep_rate:0.2f} Hz - if far from 7, inspect.')
+
+level_id = t_to_phase_idx(onset_t)
+n_levels = len(np.unique(level_id))
+ssep_traces = []
+for lev in np.unique(level_id):
+    onset = onset_idx[level_id == lev]
+    events = np.column_stack((onset, np.zeros_like(onset), np.ones_like(onset))).astype(int)
+
+    epochs = mne.Epochs(eeg_ssep,
+                        events,
+                        event_id=1,
+                        tmin=-0.020,
+                        tmax=0.080,
+                        baseline=(-0.010, 0.00),
+                        reject_by_annotation=True,
+                        preload=True)
+    evoked = epochs.average()
+
+    tmin_pp, tmax_pp = 0.00, 0.060  # in seconds
+    evoked_crop = evoked.copy().crop(tmin=tmin_pp, tmax=tmax_pp)
+    ch_idxs = list(map(evoked.ch_names.index, ['C3','P3','P7',]))
+    trace = evoked.data[ch_idxs] * 1e6
+    ssep_traces.append([phase_levels[lev], trace])
+
+
 ## display the summary
 
-gs = GridSpec(5, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
+gs = GridSpec(6, n_topo+1, left=0.1, right=0.9, top=0.98, bottom=0.15,
               width_ratios=[1]*n_topo + [0.1],
-              height_ratios=[2,2,3,2,3],
-              hspace=0.4)
-fig = pl.figure(figsize=(11,8))
+              height_ratios=[2,2,3,2,3,5],
+              hspace=0.45)
+fig = pl.figure(figsize=(11,9))
 
 # show propofol ce
 ax = fig.add_subplot(gs[0,:-1])
@@ -370,7 +498,63 @@ ax.set_xlabel('Time (minutes)')
 ax.set_yticks([0, 50, 100])
 ax.grid(axis='y')
 
+# show chirp and oddball and SSEP
+
+# grab the correct y position on figure, but will make x's manually
+row_pos_ax = fig.add_subplot(gs[5, 0])
+_,y,_,h = row_pos_ax.get_position().bounds
+h *= 0.5
+y += 0.08
+row_pos_ax.remove()
+
+ob_ax = None
+ssep_ax = None
+for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(chirps, oddballs, ssep_traces):
+    assert c_plev == o_plev == s_plev
+    t0 = phase_starts[phase_levels.tolist().index(c_plev)]
+    t0 = (t0 - summary_start_time) / 60 + 5 # left side of panel 5 mins into new prop level
+    
+    x,_ = fig.axes[0].transData.transform([t0, -1])
+    x,_ = fig.transFigure.inverted().transform([x, -1])
+    w = 0.08
+
+    # chirp
+    ax = fig.add_axes([x, y, w, h*0.8])
+
+    ax.imshow(chirp_i,
+              aspect='auto',
+              origin='lower',
+              vmin=0.0,
+              vmax=0.3,
+              cmap=pl.cm.viridis)
+    ax.axis('off')
+
+    # oddball
+    ax = fig.add_axes([x, y-h*1.0, w, h*0.8])
+    #ax.plot(ob_i_fr - ob_i_ps, color='teal')
+    ax.plot(ob_i_fr, color='teal')
+    #ax.plot(ob_i_ps, color='crimson')
+    if ob_ax: ax.sharey(ob_ax)
+    ob_ax = ax
+    ax.set_yticklabels([])
+    ax.set_xlim([0, 180])
+    ax.set_xticklabels([])
+
+    # ssep
+    ax = fig.add_axes([x, y-h*2.0, w, h*0.8])
+    ax.plot(ssep_trace.T, color='crimson')
+    if ssep_ax: ax.sharey(ssep_ax)
+    ssep_ax = ax
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+
+# save summary fig
 fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
+
+
+
+
+
 
 #-- spect summary analyses
 '''
@@ -454,6 +638,16 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 '''
+
+
+
+
+
+
+
+
+## ------------ Individual analyses
+
 
 ## Squeeze
 
@@ -586,7 +780,7 @@ for eid, ax in zip(eids, axs):
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.2,
+              vmax=0.4,
               extent=[itc.times[0], itc.times[-1], itc.freqs[0], itc.freqs[-1]],
               cmap='rainbow')
     
