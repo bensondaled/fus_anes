@@ -13,6 +13,7 @@ from mne_icalabel import label_components
 
 from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne
 from fus_anes.constants import MONTAGE as channel_names
+from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
@@ -143,6 +144,39 @@ eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch
 switch_channel = channel_names.index('gripswitch')
 switch = eeg_switch._data[switch_channel]
 
+## Compute effect site concentrations
+if name == '2025-07-25_08-38-29_subject-b003':
+    pump = pump.iloc[2:]
+
+t = TCI(age=sconfig['age'],
+        sex=sconfig['sex'],
+        weight=sconfig['weight'],
+        height=sconfig['height'])
+t.infuse(0)
+starttime = eeg_time[0]
+endtime = eeg_time[-1]
+sec = starttime
+pidx = 0
+lev = []
+while sec < endtime:
+    while pidx<len(pump) and sec >= pump.index.values[pidx]:
+        rate = pump.iloc[pidx].rate
+        rate = 10000 * rate / sconfig['weight']
+        t.infuse(rate)
+        t.wait(1)
+        pidx += 1
+        sec += 1
+        lev.append(t.level)
+    t.wait(1)
+    sec += 1
+    lev.append(t.level)
+for _ in range(60*5):
+    t.wait(1)
+    lev.append(t.level)
+
+ce_vals = np.array(lev)
+ce_time = np.arange(len(lev)) + starttime
+
 ## Label propofol levels
 if tci_cmd is not None:
     goto = tci_cmd[tci_cmd.kind == 'goto']
@@ -243,40 +277,88 @@ axs[1].set_ylabel('% response')
 pl.savefig(f'/Users/bdd/Desktop/squeeze_{name}.pdf')
 
 ## Spectrogram
-eeg_spect = eeg.copy()
-eeg_spect.set_eeg_reference(['Cz'])
-frontal = np.isin(channel_names, ['F3', 'Fz', 'FCz', 'F4'])
-posterior = np.isin(channel_names, ['P7', 'P8', 'Oz', 'P3', 'P4'])
-e_f = eeg_spect._data[frontal] * 1e6 # to uV
-e_p = eeg_spect._data[posterior] * 1e6 # to uV
-decim = 4
-sp_frontal, sp_t, sp_f = mts(e_f.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
-sp_posterior, sp_t, sp_f  = mts(e_p.T[::decim], fs=fs/decim, window_size=40.0, window_step=20.0)
-def spect_t2i(t):
-    return np.argmin(np.abs(t - sp_t))
-f_keep = sp_f < 40
-sp_f = sp_f[f_keep]
-sp_frontal = sp_frontal[:, f_keep, :]
-sp_posterior = sp_posterior[:, f_keep, :]
+s_win_size = 20.0 # secs
+n_topo = 15
 
-fig, axs = pl.subplots(2, 1, sharex=True)
-for ax, sp in zip(axs, [sp_frontal, sp_posterior]):
-    sp = np.nanmedian(sp, axis=0)
+eeg_spect = eeg.copy().pick('eeg')
+#eeg_spect.set_eeg_reference(['Cz'])
+eeg_spect = eeg_spect.drop_channels(eeg.info['bads'])
+eeg_spect = eeg_spect.resample(100)
 
-    vmin, vmax = np.nanpercentile(sp, [1, 95])
-    ax.pcolormesh(sp_t, sp_f, sp,
-                 vmin=vmin, vmax=vmax,
-                 cmap=pl.cm.rainbow)
+# nan bad segments
+sfreq = eeg_spect.info['sfreq']
+mask = np.ones(eeg_spect.n_times, dtype=np.float32)
+for ann in eeg_spect.annotations:
+    desc = ann['description']
+    onset = ann['onset']
+    duration = ann['duration']
+    if desc.upper().startswith("BAD"):
+        start = int(onset * sfreq)
+        stop = int((onset + duration) * sfreq)
+        mask[start:stop] = np.nan
+mask = mask[:, None]
 
-ax = axs[0]
-for ps, plev in zip(phase_starts, phase_levels):
-    ax.axvline(ps-eeg_time[0], color='white', ls=':')
-    ax.text(ps-eeg_time[0], 42, f'to {plev:0.1f}', clip_on=False,
-            ha='center', va='center')
+# compute spect
+in_data = eeg_spect._data.T * 1e6 * mask
+spect, sp_t, sp_f = mts(in_data,
+                        window_size=s_win_size,
+                        window_step=s_win_size,
+                        fs=eeg_spect.info['sfreq'])
+sp = np.nanmedian(spect, axis=0)
+sp = nanpow2db(sp)
+#spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
+#sp2 = np.nanmedian(spect2, axis=0)
 
-summary = []
+gs = GridSpec(3, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
+              width_ratios=[1]*n_topo + [0.1],
+              height_ratios=[2,3,3])
+fig = pl.figure(figsize=(15,8))
+
+ax = fig.add_subplot(gs[0,:-1])
+ax.plot((ce_time-eeg_time[0])/60, ce_vals, color='k')
+ax.set_xlabel('Time (minutes)')
+ax.set_ylabel('Propofol\nlevel')
+ax.set_yticks(np.arange(0, 3.5, 0.5))
+ax.set_xlim([0, (eeg_time[-1]-eeg_time[0])/60])
+ax.grid(True)
+
+ax = fig.add_subplot(gs[2,:-1])
+vmin, vmax = np.nanpercentile(sp, [1, 95])
+pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
+             vmin=vmin, vmax=vmax,
+             cmap=pl.cm.rainbow)
+cax = fig.add_subplot(gs[2,-1])
+cbar = pl.colorbar(pcm, cax=cax, shrink=0.5, label='Power (dB)')
+ax.set_xlabel('Time (minutes)')
+ax.set_ylabel('Frequency (Hz)')
+ax.set_xlim([0, (eeg_time[-1]-eeg_time[0])/60])
+
+# and topo
 alpha = (sp_f>=11) & (sp_f<15)
 delta = (sp_f>=0.5) & (sp_f<4)
+
+t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
+for i_topo in range(n_topo):
+    idx = t_idxs[i_topo]
+    start_idx = idx[0]
+    end_idx = idx[-1]
+
+    alpha_power = np.nanmean(spect[:, alpha, start_idx:end_idx], axis=(1, 2))
+
+    ax = fig.add_subplot(gs[1, i_topo])
+    mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False)
+
+    if i_topo == 0:
+        ax.set_ylabel('Alpha power')
+
+#-- spect summary analyses
+
+def spect_t2i(t):
+    return np.argmin(np.abs(sp_t - t))
+is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
+is_frontal[:] = True # TEMP TODO, maybe keep? helps SNR
+
+summary = []
 
 # use entire phase
 pss = np.append(phase_starts, 1e15)
@@ -289,18 +371,20 @@ for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
 
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
-    chunk = sp_frontal[:, :, i0:i1]
+    chunk = spect[is_frontal, :, i0:i1]
 
     chunk = np.nanmean(chunk, axis=0)
-    #chunk = nanpow2db(chunk)
 
     chunk_a = chunk[alpha, :]
     chunk_d = chunk[delta, :]
 
     mean_a = np.nanmedian(chunk_a)
     mean_d = np.nanmedian(chunk_d)
-
-    cent_a = np.nanmedian(sp_f[alpha][np.nanargmax(chunk_a, axis=0)])
+    
+    try:
+        cent_a = np.nanmedian(sp_f[alpha][np.nanargmax(chunk_a, axis=0)])
+    except ValueError:
+        cent_a = np.nan
 
     summary.append([lev, mean_a, mean_d, cent_a])
 summary = np.array(summary)
@@ -351,69 +435,6 @@ ax.legend()
 pl.savefig(f'/Users/bdd/Desktop/power_{name}.pdf')
 np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 
-## Spectrogram v2
-s_win_size = 20.0 # secs
-n_topo = 10
-
-eeg_spect = eeg.copy().pick('eeg')
-#eeg_spect.set_eeg_reference(['Cz'])
-eeg_spect = eeg_spect.drop_channels(eeg.info['bads'])
-eeg_spect = eeg_spect.resample(100)
-
-# nan bad segments
-sfreq = eeg_spect.info['sfreq']
-mask = np.ones(eeg_spect.n_times, dtype=np.float32)
-for ann in eeg_spect.annotations:
-    desc = ann['description']
-    onset = ann['onset']
-    duration = ann['duration']
-    if desc.upper().startswith("BAD"):
-        start = int(onset * sfreq)
-        stop = int((onset + duration) * sfreq)
-        mask[start:stop] = np.nan
-mask = mask[:, None]
-
-# compute spect
-in_data = eeg_spect._data.T * 1e6 * mask
-spect, sp_t, sp_f = mts(in_data,
-                        window_size=s_win_size,
-                        window_step=s_win_size,
-                        fs=eeg_spect.info['sfreq'])
-sp = np.nanmedian(spect, axis=0)
-sp = nanpow2db(sp)
-#spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
-#sp2 = np.nanmedian(spect2, axis=0)
-
-gs = GridSpec(2, n_topo+1, left=0.1, right=0.9, top=0.95, bottom=0.15,
-              width_ratios=[1]*n_topo + [0.1])
-fig = pl.figure(figsize=(15,8))
-ax = fig.add_subplot(gs[1,:-1])
-vmin, vmax = np.nanpercentile(sp, [1, 95])
-pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
-             vmin=vmin, vmax=vmax,
-             cmap=pl.cm.rainbow)
-cax = fig.add_subplot(gs[1,-1])
-cbar = pl.colorbar(pcm, cax=cax, shrink=0.5, label='Power (dB)')
-ax.set_xlabel('Time (minutes)')
-ax.set_ylabel('Frequency (Hz)')
-
-# and topo
-alpha_band = (8, 14)
-alpha_idx = np.where((sp_f >= alpha_band[0]) & (sp_f <= alpha_band[1]))[0]
-
-t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
-for i_topo in range(n_topo):
-    idx = t_idxs[i_topo]
-    start_idx = idx[0]
-    end_idx = idx[-1]
-
-    alpha_power = np.nanmean(spect[:, alpha_idx, start_idx:end_idx], axis=(1, 2))
-
-    ax = fig.add_subplot(gs[0, i_topo])
-    mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False)
-
-    if i_topo == 0:
-        ax.set_ylabel('Alpha power')
 
 ## Chirp
 #eeg_chirp = eeg.copy() # worked v well w/ b004, ie avg ref
@@ -757,40 +778,10 @@ axs[2].set_title('RT (ms)')
 # TODO: separate by pre/post (in future will be labeled with start token) 
 
 ## Sandbox 1 - squeeze detailed view
+lev = ce_vals
 
-if name == '2025-07-25_08-38-29_subject-b003':
-    pump = pump.iloc[2:]
-
-from fus_anes.tci import TCI_Propofol as TCI
-t = TCI(age=sconfig['age'],
-        sex=sconfig['sex'],
-        weight=sconfig['weight'],
-        height=sconfig['height'])
-t.infuse(0)
-starttime = pump.index.values[0] - 15*60
-endtime = tci_cmd.index.values[(tci_cmd.ce_target==0.4) & (tci_cmd.kind=='goto')][0] + 15 * 60
-sec = starttime
-pidx = 0
-lev = []
-while sec < endtime:
-    while pidx<len(pump) and sec >= pump.index.values[pidx]:
-        rate = pump.iloc[pidx].rate
-        rate = 10000 * rate / sconfig['weight']
-        t.infuse(rate)
-        t.wait(1)
-        pidx += 1
-        sec += 1
-        lev.append(t.level)
-    t.wait(1)
-    sec += 1
-    lev.append(t.level)
-for _ in range(60*5):
-    t.wait(1)
-    lev.append(t.level)
-
-lev = np.array(lev)
 fig, ax = pl.subplots(figsize=(15,9))
-ax.plot(np.arange(len(lev))[::5]/60, lev[::5], color='k', lw=2)
+ax.plot(ce_time/60, lev[::5], color='k', lw=2)
 
 sq_cmd = sq_onset - starttime
 sq_did = squeeze_times - starttime
