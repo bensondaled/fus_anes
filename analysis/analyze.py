@@ -17,13 +17,13 @@ from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -211,7 +211,10 @@ def t_to_phase_level(t):
 ## ---- Analyses
 
 ## Summary with spectrogram
-summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
+if tci_cmd is None:
+    summary_start_time = eeg_time[0]
+else:
+    summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
 summary_end_time = summary_start_time + 8800 #tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
 total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60
@@ -390,13 +393,14 @@ gs = GridSpec(6, n_topo+1, left=0.1, right=0.9, top=0.98, bottom=0.15,
 fig = pl.figure(figsize=(11,9))
 
 # show propofol ce
-ax = fig.add_subplot(gs[0,:-1])
-ax.plot((ce_time-summary_start_time)/60, ce_vals, color='k', lw=3)
-#ax.set_xlabel('Time (minutes)')
-ax.set_ylabel('Propofol\nlevel')
-ax.set_yticks(np.arange(0, 3.5, 1.0))
-ax.set_xlim([0, total_mins])
-ax.grid(True)
+if tci_cmd is not None:
+    ax = fig.add_subplot(gs[0,:-1])
+    ax.plot((ce_time-summary_start_time)/60, ce_vals, color='k', lw=3)
+    #ax.set_xlabel('Time (minutes)')
+    ax.set_ylabel('Propofol\nlevel')
+    ax.set_yticks(np.arange(0, 3.5, 1.0))
+    ax.set_xlim([0, total_mins])
+    ax.grid(True)
 
 # show spect
 ax = fig.add_subplot(gs[4,:-1])
