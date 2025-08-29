@@ -23,7 +23,8 @@ def filter_eeg(data, fs, lo=50, hi=0.5, notch=60):
     return out
 
 def detect_switch(signal, threshold=1.0, min_duration=3, baseline_window=5000):
-    baseline = median_filter(signal, size=baseline_window)
+    #baseline = median_filter(signal, size=baseline_window)
+    baseline = np.ones_like(signal) * np.percentile(signal, 1)
     elevated = signal > (baseline + threshold)
 
     changes = np.diff(elevated.astype(int), prepend=0)

@@ -17,13 +17,14 @@ from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -138,6 +139,11 @@ eeg_ssep.filter(l_freq=65., h_freq=fs/2-0.1, fir_design='firwin', picks=['ssep']
 ssep_channel = channel_names.index('ssep')
 ssep = eeg_ssep._data[ssep_channel]
 eeg_ssep.set_eeg_reference(['Fz'])#, 'FCz', 'Cz'])
+if name == '2025-08-29_08-54-34_subject-b003': # ssep reset issue
+    ssep_markers = markers[markers.text.str.contains('ssep')]
+    drop = ssep_markers.iloc[[7,8,9]]
+    assert 'reset' in drop.iloc[-1].text
+    markers.drop(index=drop.index.values, inplace=True)
 
 eeg_switch = eeg.copy()
 eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch'])
@@ -219,7 +225,7 @@ summary_end_time = summary_start_time + 8800 #tci_cmd.index.values[tci_cmd.ce_ta
 total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60
 s_win_size = 20.0 # secs
-n_topo = 10
+n_topo = 16
 
 eeg_spect = eeg.copy().pick('eeg')
 #eeg_spect.set_eeg_reference(['Cz'])
@@ -350,6 +356,7 @@ onset_t = np.array([eeg_time[i] for i in onset_idx])
 # filter to include only those inside manually marked bounds of ssep testing made during session
 bounds = markers[markers.text.str.startswith('ssep')]
 bs = bounds.text.str.strip().str.replace('ssep ','').values
+bs = np.array([b for b in bs if 'reset' not in b]) # 2025-08-29_08-54-34_subject-b003 had a reset
 assert np.all(bs[0::2] == 'start')
 assert np.all(bs[1::2] == 'stop')
 bounds = np.array(list(zip(bounds.t.values[0::2], bounds.t.values[1::2])))
@@ -433,22 +440,26 @@ for i_topo in range(n_topo):
         ax.set_ylabel('Alpha power')
 
 # show alpha and delta numerically
-chunk_dt = 60*5
+chunk_dt = 90.0 # secs
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
+fspect = spect[is_frontal, ...]
 response_traj = []
 for t0 in time_chunks:
     t1 = t0 + chunk_dt
     i0 = spect_t2i(t0)
     i1 = spect_t2i(t1)
-    fspect = spect[is_frontal, ...]
-    alpha_power = np.nanmean(fspect[:, alpha, i0:i1+1], axis=(0, 1, 2)) # NOTE frontal
+    alpha_power = np.nanmean(spect[:, alpha, i0:i1+1], axis=(0, 1, 2))
+    f_alpha_power = np.nanmean(fspect[:, alpha, i0:i1+1], axis=(0, 1, 2))
     delta_power = np.nanmean(spect[:, delta, i0:i1+1], axis=(0, 1, 2))
-    response_traj.append([t0+chunk_dt//2, alpha_power, delta_power])
+    response_traj.append([t0+chunk_dt//2, alpha_power, f_alpha_power, delta_power])
 response_traj = np.array(response_traj)
 ax = fig.add_subplot(gs[3, :-1])
-t, a, d = response_traj.T
+t, a, fa, d = response_traj.T
 ax.plot(t/60, a, color='indianred', lw=1.5)
+fax = ax.twinx()
+fax.plot(t/60, fa/a, color='grey', lw=1.5)
+fax.set_yticks([])
 tax = ax.twinx()
 tax.plot(t/60, d, color='indigo', lw=1.5)
 ax.set_xlim([0, total_mins])
@@ -457,7 +468,7 @@ ax.set_ylabel('Power (dB)')
 ax.tick_params(axis='y', labelcolor='indianred')
 tax.tick_params(axis='y', labelcolor='indigo')
 ax.spines['right'].set_visible(True)
-ax.text(0.9, 0.98, 'Frontal alpha', fontsize=10,
+ax.text(0.9, 0.98, 'Alpha', fontsize=10,
         color='indianred',
         ha='left',
         va='center',
@@ -469,7 +480,7 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
         transform=ax.transAxes)
 
 # show squeeze
-chunk_dt = 60
+chunk_dt = 30
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
@@ -495,7 +506,7 @@ ax = fig.add_subplot(gs[1, :-1])
 rshow = response_traj.T[1]
 rfilled = pd.Series(rshow).ffill()
 ax.plot(response_traj.T[0]/60, rfilled, color='purple', lw=3, ls=':')
-ax.plot(response_traj.T[0]/60, rshow, color='purple', lw=3)
+ax.scatter(response_traj.T[0]/60, rshow, color='darkviolet', lw=3, marker='o')
 ax.set_xlim([0, total_mins])
 ax.set_ylabel('% command\nfollowing')
 ax.set_xlabel('Time (minutes)')
