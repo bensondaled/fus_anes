@@ -18,13 +18,13 @@ from threshs import switch_thresh, ssep_thresh
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -182,6 +182,12 @@ for _ in range(60*5):
 
 ce_vals = np.array(lev)
 ce_time = np.arange(len(lev)) + starttime
+
+def ce_t2i(t):
+    if isinstance(t, (list, np.ndarray)):
+        return np.array([ce_t2i(x) for x in t])
+    else:
+        return np.argmin(np.abs(t - ce_time))
 
 ## Label propofol levels
 if tci_cmd is not None:
@@ -422,7 +428,7 @@ ax.set_ylabel('Frequency (Hz)')
 ax.set_xlim([0, total_mins])
 
 # show topo
-alpha = (sp_f>=8) & (sp_f<14)
+alpha = (sp_f>=8) & (sp_f<15)
 delta = (sp_f>=0.8) & (sp_f<4)
 
 t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
@@ -456,9 +462,12 @@ for t0 in time_chunks:
 response_traj = np.array(response_traj)
 ax = fig.add_subplot(gs[3, :-1])
 t, a, fa, d = response_traj.T
+rat = nanpow2db(fa/a)
+a = nanpow2db(a)
+d = nanpow2db(d)
 ax.plot(t/60, a, color='indianred', lw=1.5)
 fax = ax.twinx()
-fax.plot(t/60, fa/a, color='grey', lw=1.5)
+fax.plot(t/60, rat, color='grey', lw=1.5)
 fax.set_yticks([])
 tax = ax.twinx()
 tax.plot(t/60, d, color='indigo', lw=1.5)
@@ -579,13 +588,13 @@ is_frontal[:] = True # TEMP TODO, maybe keep? helps SNR
 summary = []
 
 # use entire phase
-pss = np.append(phase_starts, 1e15)
-for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
+#pss = np.append(phase_starts, 1e15)
+#for t0, t1, lev in zip(pss[:-1], pss[1:], phase_levels):
 
 # use just the final 2 mins
-#pss = np.append(phase_starts[1:], phase_starts[-1]+20*60) - 60*2
-#pse = pss + 60*2
-#for t0, t1, lev in zip(pss, pse, phase_levels):
+pss = np.append(phase_starts[1:], phase_starts[-1]+20*60) - 60*2
+pse = pss + 60*2
+for t0, t1, lev in zip(pss, pse, phase_levels):
 
     i0 = spect_t2i(t0-eeg_time[0])
     i1 = spect_t2i(t1-eeg_time[0])
@@ -655,11 +664,43 @@ np.save(f'/Users/bdd/Desktop/power_summ_{name}.npy', summary)
 '''
 
 
+## anteriorization sandbox analysis
+is_ant = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
+is_post = np.isin(eeg_spect.ch_names, ['P7', 'P3', 'Pz', 'P4', 'P8', 'Oz'])
+spect_ant = np.nanmean(spect[is_ant], axis=0)
+spect_post = np.nanmean(spect[is_post], axis=0)
 
+res = []
+for t, sa, sp in zip(sp_t, spect_ant.T, spect_post.T):
+    t = t + summary_start_time
+    a = np.nanmean(sa[alpha])
+    p = np.nanmean(sp[alpha])
+    ce = ce_vals[ce_t2i(t)]
+    res.append([ce,a,p,])
+res = np.array(res)
+res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 12, axis=0)])
+c,a,p = res.T
+keep = np.diff(c, prepend=-1) > 0
 
+c = c[keep]
+a = a[keep]
+p = p[keep]
 
-
-
+fig, axs = pl.subplots(1, 3, figsize=(12,4))
+ax = axs[0]
+ax.scatter(c, a, c=np.arange(len(c)), s=200)
+ax.set_title('anterior')
+ax = axs[1]
+ax.scatter(c ,p, c=np.arange(len(c)), s=200)
+ax.set_title('posterior')
+ax = axs[2]
+ax.scatter(c, a/p, c=np.arange(len(c)), s=200)
+ax.set_title('a/p ratio')
+ax.set_ylim([0,4])
+ax.set_xlim([-0.3,3.6])
+ax.set_xticks(np.arange(0, 3.3, 0.5))
+ax.grid(True)
+pl.savefig(f'/Users/bdd/Desktop/alpha_{name}.pdf')
 
 ## ------------ Individual analyses
 
