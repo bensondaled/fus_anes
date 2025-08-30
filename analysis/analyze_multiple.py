@@ -43,7 +43,7 @@ for idx, name in enumerate(order):
 
     ax_col = axs[:, idx]
 
-    c,a,p = res.T
+    c,a,p,delt = res.T
     up = np.diff(c, prepend=-1) >= 0
     down = ~up
     
@@ -121,18 +121,18 @@ for idx, names in enumerate(order):
         c_ = c[keep]
         a_ = a[keep]
         p_ = p[keep]
-        ratio = a_ / p_
+        show = a_ / p_
 
         kw = dict(s=40, marker='o', color=col)
         
-        ax.scatter(c_, ratio, **kw)
+        ax.scatter(c_, show, **kw)
         ax.set_ylabel(r'Anteroposterior $\alpha$ ratio')
 
-        xv, yv, (A,y0,ec50,_) = fit_sigmoid2(c_, ratio, return_params=True)
+        xv, yv, (A,y0,ec50,_) = fit_sigmoid2(c_, show, return_params=True)
         ax.plot(xv, yv, color=col, lw=1,
                 label=f'?{cond}, A={A:0.1f}, y0={y0:0.1f}, ec50={ec50:0.1f}',)
 
-        ax.set_xticks(np.arange(0, 3.2, 0.3))
+        ax.set_xticks(np.arange(0, 3.2, 0.5))
         ax.grid(True)
     
     ax.set_title(name[-4:])
