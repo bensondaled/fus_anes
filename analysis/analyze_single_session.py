@@ -16,16 +16,22 @@ from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne
 from fus_anes.constants import MONTAGE as channel_names
 from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
+from timings import us_startstop
 
 ## Params
 #session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
+#session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
+
+#session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
+session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -53,9 +59,11 @@ with pd.HDFStore(session_path, 'r') as h:
     if 'tci_cmd' in h:
         tci_cmd = h.tci_cmd
         pump = h.pump
+        is_us_session = False
     else:
         tci_cmd = None
         pump = None
+        is_us_session = True
     print(h.keys())
 
 sconfig = json.loads(sconfig.iloc[0])
@@ -113,19 +121,20 @@ elif already_clean:
 eeg = eeg_clean
 
 # ICA 
-if os.path.exists(ica_path):
-    ica = mne.preprocessing.read_ica(ica_path)
-else:
-    eeg_for_ica = eeg_clean.copy()
-    eeg_for_ica = eeg_for_ica.notch_filter(freqs=[60,120,180,200,240], method='fir', picks=None, notch_widths=2.0)
-    eeg_for_ica = eeg_for_ica.filter(l_freq=1.0, h_freq=100.0)
-    eeg_for_ica.set_eeg_reference('average', projection=False)
-    ica = mne.preprocessing.ICA(n_components=13, method='infomax', fit_params=dict(extended=True))
-    ica.fit(eeg_for_ica, picks='eeg')
-    labels = label_components(eeg_for_ica, ica, method='iclabel')
-    print(labels['labels'])
-    ica.exclude = [i for i in range(len(labels['labels'])) if labels['labels'][i] != 'brain']
-    ica.save(ica_path)
+if not is_us_session:
+    if os.path.exists(ica_path):
+        ica = mne.preprocessing.read_ica(ica_path)
+    else:
+        eeg_for_ica = eeg_clean.copy()
+        eeg_for_ica = eeg_for_ica.notch_filter(freqs=[60,120,180,200,240], method='fir', picks=None, notch_widths=2.0)
+        eeg_for_ica = eeg_for_ica.filter(l_freq=1.0, h_freq=100.0)
+        eeg_for_ica.set_eeg_reference('average', projection=False)
+        ica = mne.preprocessing.ICA(n_components=13, method='infomax', fit_params=dict(extended=True))
+        ica.fit(eeg_for_ica, picks='eeg')
+        labels = label_components(eeg_for_ica, ica, method='iclabel')
+        print(labels['labels'])
+        ica.exclude = [i for i in range(len(labels['labels'])) if labels['labels'][i] != 'brain']
+        ica.save(ica_path)
 
 ## Preprocessing
 # filter
@@ -134,7 +143,8 @@ eeg = eeg.filter(l_freq=0.1, h_freq=58, fir_design='firwin', picks='eeg')
 
 # reference
 eeg.set_eeg_reference('average', projection=False)  # default unless analyses undo it
-eeg = ica.apply(eeg.copy())
+if not is_us_session:
+    eeg = ica.apply(eeg.copy())
 
 # extract peripheral signals
 eeg_ssep = eeg.copy()
@@ -155,18 +165,12 @@ switch_channel = channel_names.index('gripswitch')
 switch = eeg_switch._data[switch_channel]
 
 ## Label propofol levels
-if tci_cmd is not None:
+if not is_us_session:
     goto = tci_cmd[tci_cmd.kind == 'goto']
     _p_target = goto.ce_target
 else:
     # for ultrasound sessions, mock label as prop 0 vs 1 for pre-post respectively
-    txt = markers.text.str.lower().str.contains
-    is_us = txt('ultrasound') | txt('tus') | txt('fus')
-    us = markers[is_us]
-    print(us)
-    input('Should be just two rows: fus on then fus off')
-    bord = us.t.values
-    _p_target = pd.Series([1, 2], index=bord)
+    _p_target = pd.Series([1, 2], index=us_startstop[name])
 
 def t_to_phase_idx(t):
     if isinstance(t, (list, np.ndarray)):
@@ -190,7 +194,7 @@ def t_to_phase_level(t):
         return phase_levels[idx]
 
 ## Compute effect site concentrations
-if tci_cmd is not None:
+if not is_us_session:
     if name == '2025-07-25_08-38-29_subject-b003':
         pump = pump.iloc[2:]
 
@@ -223,9 +227,13 @@ if tci_cmd is not None:
     ce_vals = np.array(lev)
     ce_time = np.arange(len(lev)) + starttime
 
-elif tci_cmd is None:
-    ce_vals = np.repeat(phase_levels, 100)
-    ce_time = np.repeat(phase_starts, 100)
+elif is_us_session:
+    assert len(phase_starts) == 3 # in u/s sessions, this is pre-us, during, after
+    ce_time = np.concatenate([ np.linspace(phase_starts[0], phase_starts[1], 100),
+                               np.linspace(phase_starts[1], phase_starts[2], 100),
+                               np.linspace(phase_starts[2], eeg_time[-1], 100),
+                            ])
+    ce_vals = np.array([phase_levels[0]]*100 + [phase_levels[1]]*100 + [phase_levels[2]]*100)
 
 def ce_t2i(t):
     if isinstance(t, (list, np.ndarray)):
@@ -236,7 +244,7 @@ def ce_t2i(t):
 ## ---- Analyses
 
 ## Summary with spectrogram
-if tci_cmd is None:
+if is_us_session:
     summary_start_time = eeg_time[0]
 else:
     summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
@@ -416,13 +424,15 @@ is_ant = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
 is_post = np.isin(eeg_spect.ch_names, ['P7', 'P3', 'Pz', 'P4', 'P8', 'Oz'])
 spect_ant = np.nanmean(spect[is_ant], axis=0)
 spect_post = np.nanmean(spect[is_post], axis=0)
+spect_full = np.nanmean(spect, axis=0)
 res = []
-for _t, _sa, _sp in zip(sp_t, spect_ant.T, spect_post.T):
+for _t, _sa, _sp, _sf in zip(sp_t, spect_ant.T, spect_post.T, spect_full.T):
     _t = _t + summary_start_time
     _a = np.nanmean(_sa[alpha])
     _p = np.nanmean(_sp[alpha])
+    _delt = np.nanmean(_sp[delta])
     _ce = ce_vals[ce_t2i(_t)]
-    res.append([_ce,_a,_p,])
+    res.append([_ce,_a,_p,_delt])
 res = np.array(res)
 res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 20, axis=0)])
 with h5py.File(anteriorization_path, 'a') as h:
@@ -439,14 +449,13 @@ gs = GridSpec(6, n_topo+1, left=0.1, right=0.9, top=0.98, bottom=0.15,
 fig = pl.figure(figsize=(11,9))
 
 # show propofol ce
-if tci_cmd is not None:
-    ax = fig.add_subplot(gs[0,:-1])
-    ax.plot((ce_time-summary_start_time)/60, ce_vals, color='k', lw=3)
-    #ax.set_xlabel('Time (minutes)')
-    ax.set_ylabel('Propofol\nlevel')
-    ax.set_yticks(np.arange(0, 3.5, 1.0))
-    ax.set_xlim([0, total_mins])
-    ax.grid(True)
+ax = fig.add_subplot(gs[0,:-1])
+ax.plot((ce_time-summary_start_time)/60, ce_vals, color='k', lw=3)
+#ax.set_xlabel('Time (minutes)')
+ax.set_ylabel('Propofol\nlevel')
+ax.set_yticks(np.arange(0, 3.5, 1.0))
+ax.set_xlim([0, total_mins])
+ax.grid(True)
 
 # show spect
 ax = fig.add_subplot(gs[4,:-1])

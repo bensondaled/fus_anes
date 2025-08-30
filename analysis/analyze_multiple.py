@@ -13,16 +13,29 @@ with h5py.File(anteriorization_path, 'r') as h:
     for name in h:
         ant[name] = np.array(h[name])
 
+
+## big full one
 order = [
         '2025-07-23_12-05-45_subject-b001',
+
+        '2025-08-04_08-48-05_subject-b001', # us
         '2025-08-05_11-52-41_subject-b001',
-        '2025-08-29_08-54-34_subject-b003',
+
+        '2025-07-24_08-38-41_subject-b003', # us
         '2025-07-25_08-38-29_subject-b003',
+
+        '2025-08-28_08-50-10_subject-b003', # us
+        '2025-08-29_08-54-34_subject-b003',
+
+        '2025-07-29_08-07-02_subject-b004', # us
         '2025-07-30_merge_subject-b004',
+
+        '2025-08-11_07-54-24_subject-b004', # us
         '2025-08-12_09-11-34_subject-b004',
+        
         ]
 
-fig, axs = pl.subplots(6, len(ant), figsize=(15,9),
+fig, axs = pl.subplots(2, len(ant), figsize=(15,9),
                        sharey='row', sharex=True,
                        gridspec_kw=dict(wspace=1.0))
 for idx, name in enumerate(order):
@@ -35,6 +48,9 @@ for idx, name in enumerate(order):
     down = ~up
     
     for ki,keep in enumerate([up, down]):
+        if np.all(keep == False):
+            continue
+        
         mkr = ['>','<'][ki]
 
         c_ = c[keep]
@@ -44,7 +60,8 @@ for idx, name in enumerate(order):
 
         col = np.arange(len(c_))
         kw = dict(c=col, s=40, marker=mkr, cmap=pl.cm.turbo)
-
+        
+        '''
         ax = ax_col[3*ki + 0]
         ax.scatter(c_, a_, **kw)
         ax.set_ylabel('anterior')
@@ -52,8 +69,9 @@ for idx, name in enumerate(order):
         ax = ax_col[3*ki + 1]
         ax.scatter(c_ ,p_, **kw)
         ax.set_ylabel('posterior')
+        '''
 
-        ax = ax_col[3*ki + 2]
+        ax = ax_col[ki]
         ax.scatter(c_, ratio, **kw)
         ax.set_ylabel('a/p ratio')
 
@@ -72,4 +90,53 @@ for idx, name in enumerate(order):
 
     ax_col[0].set_title(name[-4:])
 
+## small aesthetic one
+order = [
+
+        ['2025-07-23_12-05-45_subject-b001',
+        '2025-08-05_11-52-41_subject-b001',],
+
+        ['2025-08-29_08-54-34_subject-b003',
+        '2025-07-25_08-38-29_subject-b003',],
+
+        ['2025-07-30_merge_subject-b004',
+        '2025-08-12_09-11-34_subject-b004',],
+        
+        ]
+
+fig, axs = pl.subplots(1, len(order), figsize=(13,4),
+                       sharey='row', sharex=True,
+                       gridspec_kw=dict(wspace=1.0, bottom=0.25))
+for idx, names in enumerate(order):
+
+    ax = axs[idx]
+
+    for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
+        res = ant[name]
+
+        c,a,p,delt = res.T
+        up = np.diff(c, prepend=-1) >= 0
+        keep = up
+        
+        c_ = c[keep]
+        a_ = a[keep]
+        p_ = p[keep]
+        ratio = a_ / p_
+
+        kw = dict(s=40, marker='o', color=col)
+        
+        ax.scatter(c_, ratio, **kw)
+        ax.set_ylabel(r'Anteroposterior $\alpha$ ratio')
+
+        xv, yv, (A,y0,ec50,_) = fit_sigmoid2(c_, ratio, return_params=True)
+        ax.plot(xv, yv, color=col, lw=1,
+                label=f'?{cond}, A={A:0.1f}, y0={y0:0.1f}, ec50={ec50:0.1f}',)
+
+        ax.set_xticks(np.arange(0, 3.2, 0.3))
+        ax.grid(True)
+    
+    ax.set_title(name[-4:])
+    ax.tick_params(rotation=90)
+    ax.legend(fontsize=7)
+    ax.set_xlabel('Propofol conc.', labelpad=20)
 ##
