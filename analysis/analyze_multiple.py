@@ -135,7 +135,8 @@ for idx, names in enumerate(order):
         ax.set_xticks(np.arange(0, 3.2, 0.5))
         ax.grid(True)
     
-    ax.set_title(name[-4:])
+    key = {'b004':'girl', 'b003':'guy from today', 'b001':'thick skull, no u/s'}
+    ax.set_title(key[name[-4:]])
     ax.tick_params(rotation=90)
     ax.legend(fontsize=7)
     ax.set_xlabel('Propofol conc.', labelpad=20)

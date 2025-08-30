@@ -26,12 +26,12 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -618,4 +618,23 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
 fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
 
 
+## --- sandbox
+from pactools import Comodulogram
+f0 = np.linspace(0.05, 4, 25)
+f1 = np.linspace(6, 40, 25)
+estimator = Comodulogram(fs=100,
+                         low_fq_range=f0,
+                         high_fq_range=f1,
+                         method='ozkurt',)
+fig,axs = pl.subplots(3,3, figsize=(15,9))
+axs = axs.ravel()
+ax_idx = 0
+for phl, ps0, ps1 in zip(phase_levels, phase_starts, np.append(phase_starts[1:], eeg_time[-1])):
+    i0, i1 = t2i([ps0, ps1])
+    sig_for_pac = eeg._data[ch_name_to_idx('Fz'), i0:i1][::5]
+    estimator.fit(sig_for_pac[None,:])
+    estimator.plot(axs=[axs[ax_idx]], vmin=0, vmax=0.11)
+    axs[ax_idx].set_title(phl)
+    ax_idx += 1
+fig.savefig(f'/Users/bdd/Desktop/{name}_pac.png')
 ##
