@@ -62,6 +62,27 @@ def fit_sigmoid(x, y, return_ec50=False, b0=0.5):
         return xvals, yvals, params[2]
     return xvals, yvals
 
+def fit_sigmoid2(x, y, return_params=False):
+    def sigmoid(x, A, y0, x0, B):
+        '''
+        A: y-stretch
+        y0: y offset
+        x0: x offset
+        B: x-stretch
+        '''
+        return y0 + A / (1 + np.exp(-B * (x-x0)))
+    
+    params, covariance = curve_fit(sigmoid,
+                                   x,
+                                   y,
+                                   maxfev=100000,
+                                   method='trf')
+    xvals = np.linspace(np.min(x), np.max(x), 50)
+    yvals = sigmoid(xvals, *params)
+    if return_params:
+        return xvals, yvals, params
+    return xvals, yvals
+
 def mts_mne(eeg, window_size=30.0):
     sfreq = eeg.info['sfreq']
 

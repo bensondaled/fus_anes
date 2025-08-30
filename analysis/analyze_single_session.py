@@ -18,8 +18,8 @@ from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
@@ -154,53 +154,19 @@ eeg_switch.filter(l_freq=0.1, h_freq=20, fir_design='firwin', picks=['gripswitch
 switch_channel = channel_names.index('gripswitch')
 switch = eeg_switch._data[switch_channel]
 
-## Compute effect site concentrations
-if name == '2025-07-25_08-38-29_subject-b003':
-    pump = pump.iloc[2:]
-
-t = TCI(age=sconfig['age'],
-        sex=sconfig['sex'],
-        weight=sconfig['weight'],
-        height=sconfig['height'])
-t.infuse(0)
-starttime = eeg_time[0]
-endtime = eeg_time[-1]
-sec = starttime
-pidx = 0
-lev = []
-while sec < endtime:
-    while pidx<len(pump) and sec >= pump.index.values[pidx]:
-        rate = pump.iloc[pidx].rate
-        rate = 10000 * rate / sconfig['weight']
-        t.infuse(rate)
-        t.wait(1)
-        pidx += 1
-        sec += 1
-        lev.append(t.level)
-    t.wait(1)
-    sec += 1
-    lev.append(t.level)
-for _ in range(60*5):
-    t.wait(1)
-    lev.append(t.level)
-
-ce_vals = np.array(lev)
-ce_time = np.arange(len(lev)) + starttime
-
-def ce_t2i(t):
-    if isinstance(t, (list, np.ndarray)):
-        return np.array([ce_t2i(x) for x in t])
-    else:
-        return np.argmin(np.abs(t - ce_time))
-
 ## Label propofol levels
 if tci_cmd is not None:
     goto = tci_cmd[tci_cmd.kind == 'goto']
     _p_target = goto.ce_target
 else:
     # for ultrasound sessions, mock label as prop 0 vs 1 for pre-post respectively
-    us = markers[markers.text.str.contains('ultrasound')].t.iloc[0]
-    _p_target = pd.Series([1], index=[us])
+    txt = markers.text.str.lower().str.contains
+    is_us = txt('ultrasound') | txt('tus') | txt('fus')
+    us = markers[is_us]
+    print(us)
+    input('Should be just two rows: fus on then fus off')
+    bord = us.t.values
+    _p_target = pd.Series([1, 2], index=bord)
 
 def t_to_phase_idx(t):
     if isinstance(t, (list, np.ndarray)):
@@ -223,6 +189,49 @@ def t_to_phase_level(t):
         idx = t_to_phase_idx(t)
         return phase_levels[idx]
 
+## Compute effect site concentrations
+if tci_cmd is not None:
+    if name == '2025-07-25_08-38-29_subject-b003':
+        pump = pump.iloc[2:]
+
+    t = TCI(age=sconfig['age'],
+            sex=sconfig['sex'],
+            weight=sconfig['weight'],
+            height=sconfig['height'])
+    t.infuse(0)
+    starttime = eeg_time[0]
+    endtime = eeg_time[-1]
+    sec = starttime
+    pidx = 0
+    lev = []
+    while sec < endtime:
+        while pidx<len(pump) and sec >= pump.index.values[pidx]:
+            rate = pump.iloc[pidx].rate
+            rate = 10000 * rate / sconfig['weight']
+            t.infuse(rate)
+            t.wait(1)
+            pidx += 1
+            sec += 1
+            lev.append(t.level)
+        t.wait(1)
+        sec += 1
+        lev.append(t.level)
+    for _ in range(60*5):
+        t.wait(1)
+        lev.append(t.level)
+
+    ce_vals = np.array(lev)
+    ce_time = np.arange(len(lev)) + starttime
+
+elif tci_cmd is None:
+    ce_vals = np.repeat(phase_levels, 100)
+    ce_time = np.repeat(phase_starts, 100)
+
+def ce_t2i(t):
+    if isinstance(t, (list, np.ndarray)):
+        return np.array([ce_t2i(x) for x in t])
+    else:
+        return np.argmin(np.abs(t - ce_time))
 
 ## ---- Analyses
 
@@ -452,11 +461,14 @@ ax.set_ylabel('Frequency (Hz)')
 ax.set_xlim([0, total_mins])
 
 # show topo
-t_idxs = np.array_split(np.arange(len(sp_t)), n_topo)
+t_secs = np.array_split(np.arange(total_secs), n_topo)
 for i_topo in range(n_topo):
-    idx = t_idxs[i_topo]
-    start_idx = idx[0]
-    end_idx = idx[-1]
+    sec = t_secs[i_topo]
+    start_sec = sec[0]
+    end_sec = sec[-1]
+
+    start_idx = spect_t2i(start_sec)
+    end_idx = spect_t2i(end_sec)
 
     alpha_power = np.nanmean(spect[:, alpha, start_idx:end_idx], axis=(1, 2))
 
