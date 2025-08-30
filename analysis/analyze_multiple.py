@@ -122,21 +122,24 @@ for idx, names in enumerate(order):
         a_ = a[keep]
         p_ = p[keep]
         show = a_ / p_
+        #show = a_
+        #show = 10*np.log10(a_ / p_)
 
         kw = dict(s=40, marker='o', color=col)
         
         ax.scatter(c_, show, **kw)
-        ax.set_ylabel(r'Anteroposterior $\alpha$ ratio')
+        ax.set_ylabel(r'Ant:post $\alpha$ ratio')
 
-        xv, yv, (A,y0,ec50,_) = fit_sigmoid2(c_, show, return_params=True)
-        ax.plot(xv, yv, color=col, lw=1,
-                label=f'?{cond}, A={A:0.1f}, y0={y0:0.1f}, ec50={ec50:0.1f}',)
+        #xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, show, return_params=True)
+        #rise_pt = ec50 + np.log(0.05/0.95)/B
+        #ax.plot(xv, yv, color=col, lw=1,
+        #        label=f'?{cond}\nA={A:0.1f}\ny0={y0:0.1f}\nec50={ec50:0.1f}\nrise={rise_pt:0.1f}',)
+        #ax.axvline(rise_pt, color=col, lw=2, ls=':')
 
         ax.set_xticks(np.arange(0, 3.2, 0.5))
-        ax.grid(True)
+        ax.grid(True, lw=0.25)
     
-    key = {'b004':'girl', 'b003':'guy from today', 'b001':'thick skull, no u/s'}
-    ax.set_title(key[name[-4:]])
+    ax.set_title(name[-4:])
     ax.tick_params(rotation=90)
     ax.legend(fontsize=7)
     ax.set_xlabel('Propofol conc.', labelpad=20)
