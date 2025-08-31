@@ -26,10 +26,10 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
@@ -456,6 +456,7 @@ ax.set_ylabel('Propofol\nlevel')
 ax.set_yticks(np.arange(0, 3.5, 1.0))
 ax.set_xlim([0, total_mins])
 ax.grid(True)
+ax_prop = ax
 
 # show spect
 ax = fig.add_subplot(gs[4,:-1])
@@ -538,6 +539,9 @@ max_lag = 1.0 # secs
 sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values - summary_start_time
 press_idx = detect_switch(np.abs(switch), switch_thresh[name])
 squeeze_times = np.array([eeg_time[i] for i in press_idx]) - summary_start_time
+#fig_s, ax_s = pl.subplots()
+#ax_s.vlines(sq_onset, 0, 1, color='k')
+#ax_s.vlines(squeeze_times, 0, 1, color='r')
 for t0 in time_chunks:
     t1 = t0 + chunk_dt
     sq_lev = sq_onset[(sq_onset>=t0) & (sq_onset<t1)]
@@ -563,6 +567,9 @@ ax.set_ylabel('% command\nfollowing')
 ax.set_xlabel('Time (minutes)')
 ax.set_yticks([0, 50, 100])
 ax.grid(axis='y')
+#ax.vlines(sq_onset/60, 0, 100, color='red', lw=0.25)
+#ax.vlines(squeeze_times/60, 0, 100, color='green', lw=0.25)
+ax.sharex(ax_prop)
 
 # show chirp and oddball and SSEP
 
