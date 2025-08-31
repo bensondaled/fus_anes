@@ -29,9 +29,9 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -434,7 +434,7 @@ for _t, _sa, _sp, _sf in zip(sp_t, spect_ant.T, spect_post.T, spect_full.T):
     _ce = ce_vals[ce_t2i(_t)]
     res.append([_ce,_a,_p,_delt])
 res = np.array(res)
-res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 20, axis=0)])
+#res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 20, axis=0)])
 with h5py.File(anteriorization_path, 'a') as h:
     if name in h:
         del h[name]
@@ -626,6 +626,7 @@ fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
 
 
 ## --- sandbox
+'''
 from pactools import Comodulogram
 f0 = np.linspace(0.05, 4, 25)
 f1 = np.linspace(6, 40, 25)
@@ -644,4 +645,5 @@ for phl, ps0, ps1 in zip(phase_levels, phase_starts, np.append(phase_starts[1:],
     axs[ax_idx].set_title(phl)
     ax_idx += 1
 fig.savefig(f'/Users/bdd/Desktop/{name}_pac.png')
+'''
 ##

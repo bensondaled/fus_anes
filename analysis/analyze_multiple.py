@@ -40,6 +40,7 @@ fig, axs = pl.subplots(2, len(ant), figsize=(15,9),
                        gridspec_kw=dict(wspace=1.0))
 for idx, name in enumerate(order):
     res = ant[name]
+    res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 50, axis=0)])
 
     ax_col = axs[:, idx]
 
@@ -112,29 +113,56 @@ for idx, names in enumerate(order):
     ax = axs[idx]
 
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
-        res = ant[name]
+        res = ant[name].copy()
+        
+        # include only rising/falling prop levels
+        c = res.T[0]
+        drop_starts = -(np.where(c[::-1] > 3.19)[0][0])
+        res = res[:drop_starts] # rising
+        #res = res[drop_starts:] # falling
+        
+        # bin them
+        '''
+        res = pd.DataFrame(res)
+        bins = [-0.01, #0 level
+                0.4, #0.8 level
+                1.2, #1.6 level
+                2.0, #2.4 level
+                2.8, #3.2 level
+                4.0, #3.2 level
+                ]
+        res['bin'] = pd.cut(res.iloc[:,0], bins=bins)
+        res = res.groupby('bin', as_index=False).mean()
+        res = res.values[:,1:].astype(float)
+
+        # or bin them agnostically
+        #res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 5, axis=0)])
+        '''
 
         c,a,p,delt = res.T
-        up = np.diff(c, prepend=-1) >= 0
-        keep = up
+
+        keep = ~(np.isnan(a))
         
         c_ = c[keep]
         a_ = a[keep]
         p_ = p[keep]
+        delt = delt[keep]
         show = a_ / p_
-        #show = a_
         #show = 10*np.log10(a_ / p_)
 
-        kw = dict(s=40, marker='o', color=col)
+        kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
         
         ax.scatter(c_, show, **kw)
         ax.set_ylabel(r'Ant:post $\alpha$ ratio')
 
         xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, show, return_params=True)
+
         rise_pt = ec50 + np.log(0.05/0.95)/B
-        ax.plot(xv, yv, color=col, lw=1,
+        #ax.axvline(rise_pt, color=col, lw=2, ls=':')
+
+        ax.plot(xv, yv, color=col, lw=1.5,
                 label=f'?{cond}\nA={A:0.1f}\ny0={y0:0.1f}\nec50={ec50:0.1f}\nrise={rise_pt:0.1f}',)
-        ax.axvline(rise_pt, color=col, lw=2, ls=':')
+
 
         ax.set_xticks(np.arange(0, 3.2, 0.5))
         ax.grid(True, lw=0.25)
