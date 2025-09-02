@@ -278,6 +278,7 @@ spect, sp_t, sp_f = mts(in_data,
                         window_size=s_win_size,
                         window_step=s_win_size,
                         fs=eeg_spect.info['sfreq'])
+sp_t += eeg_time[0]
 keep = (sp_f <= 30) & (sp_f > 0.5) # max frequency to show/analyze
 spect = spect[:,keep,:]
 sp_f = sp_f[keep]
@@ -420,25 +421,19 @@ for lev in np.unique(level_id):
     ssep_traces.append([phase_levels[lev], trace])
 
 # anteriorization analysis
-is_ant = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
-is_post = np.isin(eeg_spect.ch_names, ['P7', 'P3', 'Pz', 'P4', 'P8', 'Oz'])
-spect_ant = np.nanmean(spect[is_ant], axis=0)
-spect_post = np.nanmean(spect[is_post], axis=0)
-spect_full = np.nanmean(spect, axis=0)
-res = []
-for _t, _sa, _sp, _sf in zip(sp_t, spect_ant.T, spect_post.T, spect_full.T):
-    _t = _t + summary_start_time
-    _a = np.nanmean(_sa[alpha])
-    _p = np.nanmean(_sp[alpha])
-    _delt = np.nanmean(_sp[delta])
-    _ce = ce_vals[ce_t2i(_t)]
-    res.append([_ce,_a,_p,_delt])
-res = np.array(res)
-#res = np.array([np.nanmean(r, axis=0) for r in np.array_split(res, 20, axis=0)])
+ce_for_spect = np.array([ce_vals[ce_t2i(t)] for t in sp_t])
+ds0 = f'{name}_ce'
+ds1 = f'{name}_spect'
 with h5py.File(anteriorization_path, 'a') as h:
-    if name in h:
-        del h[name]
-    ds = h.create_dataset(name, data=res, compression='lzf')
+    if ds0 in h:
+        del h[ds0]
+    if ds1 in h:
+        del h[ds1]
+    h.create_dataset(ds0, data=ce_for_spect, compression='lzf')
+    ds = h.create_dataset(ds1, data=spect, compression='lzf')
+    ds.attrs['channels'] = eeg_spect.ch_names
+    ds.attrs['freq'] = sp_f
+    ds.attrs['time'] = sp_t
 
 ## display the summary
 
@@ -461,7 +456,7 @@ ax_prop = ax
 # show spect
 ax = fig.add_subplot(gs[4,:-1])
 vmin, vmax = np.nanpercentile(sp, [5, 95])
-pcm = ax.pcolormesh(sp_t/60, sp_f, sp,
+pcm = ax.pcolormesh((sp_t-summary_start_time)/60, sp_f, sp,
              vmin=vmin, vmax=vmax,
              cmap=pl.cm.rainbow)
 cax = fig.add_subplot(gs[4,-1])
@@ -471,7 +466,7 @@ ax.set_ylabel('Frequency (Hz)')
 ax.set_xlim([0, total_mins])
 
 # show topo
-t_secs = np.array_split(np.arange(total_secs), n_topo)
+t_secs = np.array_split(np.arange(total_secs)+summary_start_time, n_topo)
 for i_topo in range(n_topo):
     sec = t_secs[i_topo]
     start_sec = sec[0]
@@ -490,7 +485,7 @@ for i_topo in range(n_topo):
 
 # show alpha and delta numerically
 chunk_dt = 90.0 # secs
-time_chunks = np.arange(0, total_secs+1, chunk_dt)
+time_chunks = np.arange(0, total_secs+1, chunk_dt) + summary_start_time
 is_frontal = np.isin(eeg_spect.ch_names, ['F3', 'Fz', 'FCz', 'F4'])
 fspect = spect[is_frontal, ...]
 response_traj = []
@@ -505,6 +500,7 @@ for t0 in time_chunks:
 response_traj = np.array(response_traj)
 ax = fig.add_subplot(gs[3, :-1])
 t, a, fa, d = response_traj.T
+t -= summary_start_time
 rat = nanpow2db(fa/a)
 a = nanpow2db(a)
 d = nanpow2db(d)

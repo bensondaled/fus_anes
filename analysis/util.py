@@ -77,7 +77,7 @@ def fit_sigmoid2(x, y, return_params=False):
                                    y,
                                    maxfev=100000,
                                    method='trf')
-    xvals = np.linspace(np.min(x), np.max(x), 50)
+    xvals = np.linspace(np.min(x), np.max(x), 500)
     yvals = sigmoid(xvals, *params)
     if return_params:
         return xvals, yvals, params
