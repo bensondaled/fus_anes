@@ -19,8 +19,11 @@ order = [
         ['2025-07-30_merge_subject-b004',
         '2025-08-12_09-11-34_subject-b004',],
         
-        ['2025-09-05_08-10-33_subject-b008',
-         '2025-09-05_08-10-33_subject-b008',],
+        [
+        #'2025-09-04_08-06-39_subject-b008', # u/s
+        '2025-09-05_08-10-33_subject-b008',
+        '2025-09-05_08-10-33_subject-b008',
+         ],
         
         ]
 
@@ -151,12 +154,12 @@ for idx, names in enumerate(order):
             tp_ = tp[keep]
 
             show = a_ / p_
+            #show = a_
+            #show = p_
             #show = a_ / ta_
             #show = ta_
             #show = tp_
             #show = td_
-            #show = a_
-            #show = p_
             #show = 10*np.log10(a_ / p_)
 
             kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)

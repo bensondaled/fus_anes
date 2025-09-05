@@ -63,6 +63,7 @@ with pd.HDFStore(session_path, 'r') as h:
         tci_cmd = h.tci_cmd
         pump = h.pump
         is_us_session = False
+        _tci = h.tci
     else:
         tci_cmd = None
         pump = None
