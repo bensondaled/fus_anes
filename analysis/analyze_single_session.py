@@ -31,7 +31,10 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+
+#session_path = '/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5' # u/s
+session_path = '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -247,7 +250,8 @@ def ce_t2i(t):
 if is_us_session:
     summary_start_time = eeg_time[0]
 else:
-    summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==0.8][0] - 18*60
+    first_target = tci_cmd.ce_target.values[0]
+    summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==first_target][0] - 18*60
 summary_end_time = summary_start_time + 8800 #tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
 total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60

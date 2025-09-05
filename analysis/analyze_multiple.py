@@ -19,13 +19,16 @@ order = [
         ['2025-07-30_merge_subject-b004',
         '2025-08-12_09-11-34_subject-b004',],
         
+        ['2025-09-05_08-10-33_subject-b008',
+         '2025-09-05_08-10-33_subject-b008',],
+        
         ]
 
 ##
 ant = {}
 with h5py.File(anteriorization_path, 'r') as h:
+    print(list(h.keys()))
     for name in np.ravel(order):
-        ant[name] = np.array(h[name])
         ce = np.array(h[f'{name}_ce']).copy()
         spect_ds = h[f'{name}_spect']
         spect = np.array(spect_ds).copy()
@@ -79,7 +82,11 @@ for idx, names in enumerate(order):
                            ]).T
 
         # include only rising/falling prop levels
-        drop_starts = -(np.where(ce[::-1] > 3.19)[0][0])
+        if ce.max() > 3.1: # original protocol
+            bins_category = 0
+        else: # new protocol 2025-09-05
+            bins_category = 1
+        drop_starts = -(np.where(ce[::-1] > 2.99)[0][0])
         for direction, ax in zip([1, -1], ax_list):
             if direction == 1:
                 to_plot = _to_plot[:drop_starts] # rising
@@ -92,20 +99,39 @@ for idx, names in enumerate(order):
                 to_plot = pd.DataFrame(to_plot)
 
                 if direction == 1:
-                    bins = [-0.01, #0 level
-                            0.4, #0.8 level
-                            1.2, #1.6 level
-                            2.0, #2.4 level
-                            2.8, #3.2 level
-                            4.0, #3.2 level
-                            ]
+                    if bins_category == 0:
+                        bins = [-0.01, #0 level
+                                0.4, #0.8 level
+                                1.2, #1.6 level
+                                2.0, #2.4 level
+                                2.8, #3.2 level
+                                4.0, #3.2 level
+                                ]
+                    elif bins_category == 1:
+                        bins = [-0.01, #0 level
+                                0.25, #0.5 level
+                                0.75, #1.0 level
+                                1.25, #1.5 level
+                                1.75, #2.0 level
+                                2.25, #2.5 level
+                                2.75, #3.0 level
+                                3.25, #3.0 level
+                                ]
                 elif direction == -1:
-                    bins = [-0.01,
-                            0.8, #0.4 level
-                            1.6, #1.2 level
-                            2.4, #2.0 level
-                            3.2, #2.8 level
-                            ]
+                    if bins_category == 0:
+                        bins = [-0.01,
+                                0.8, #0.4 level
+                                1.6, #1.2 level
+                                2.4, #2.0 level
+                                3.2, #2.8 level
+                                ]
+                    elif bins_category == 1:
+                        bins = [-0.01,
+                                0.9, #0.6 level
+                                1.5, #1.2 level
+                                2.1, #1.8 level
+                                2.7, #2.4 level
+                                ]
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
                 to_plot = to_plot.groupby('bin', as_index=False).mean()
                 to_plot = to_plot.values[:,1:].astype(float)
