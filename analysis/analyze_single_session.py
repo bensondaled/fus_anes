@@ -34,7 +34,9 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5'
+
+session_path = '/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -599,7 +601,7 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.3,
+              vmax=0.7,
               cmap=pl.cm.viridis)
     ax.axis('off')
 
