@@ -29,14 +29,15 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5'
 
-session_path = '/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5' # u/s
+#session_path = '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5'
 
 # intermediate data paths
 anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
@@ -247,15 +248,17 @@ def ce_t2i(t):
     else:
         return np.argmin(np.abs(t - ce_time))
 
-## ---- Analyses
+
+# ---- Analyses
 
 ## Summary with spectrogram
 if is_us_session:
     summary_start_time = eeg_time[0]
 else:
-    first_target = tci_cmd.ce_target.values[0]
+    first_target = tci_cmd.ce_target.values
+    first_target = first_target[first_target>0][0]
     summary_start_time = tci_cmd.index.values[tci_cmd.ce_target==first_target][0] - 18*60
-summary_end_time = summary_start_time + 8800 #tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
+summary_end_time = summary_start_time + 9800 #tci_cmd.index.values[tci_cmd.ce_target==0.4][0] + 18*60
 total_secs = summary_end_time-summary_start_time
 total_mins = total_secs / 60
 s_win_size = 20.0 # secs
@@ -326,6 +329,7 @@ n_cycles = frequencies / 2.0  # higher freqs need more cycles
 n_levels = len(event_id)
 eids = list(event_id.keys())
 chirps = []
+expanded_chirps = []
 for eid in eids:
     epochs_cond = epochs[eid]
     power, itc = epochs_cond.compute_tfr(method='morlet',
@@ -339,6 +343,7 @@ for eid in eids:
 
     mean_to_show = np.mean(np.abs(itc.data[chirp_ch_idx, :, :]), axis=0) 
     chirps.append([float(eid), mean_to_show])
+    expanded_chirps.append([float(eid), itc.data])
 
 
 # prep the AEP (oddball) data
@@ -483,9 +488,11 @@ for i_topo in range(n_topo):
     end_idx = spect_t2i(end_sec)
 
     alpha_power = np.nanmean(spect[:, alpha, start_idx:end_idx], axis=(1, 2))
+    alpha_power = nanpow2db(alpha_power) # NOTE
 
     ax = fig.add_subplot(gs[2, i_topo])
-    mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False)
+    mne.viz.plot_topomap(alpha_power, eeg_spect.info, axes=ax, show=False,
+                         vlim=(-2, 11.0), cmap=pl.cm.Reds)
 
     if i_topo == 0:
         ax.set_ylabel('Alpha power')
@@ -535,7 +542,7 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
         transform=ax.transAxes)
 
 # show squeeze
-chunk_dt = 30
+chunk_dt = 60
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
@@ -601,7 +608,7 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
               aspect='auto',
               origin='lower',
               vmin=0.0,
-              vmax=0.7,
+              vmax=0.4,
               cmap=pl.cm.viridis)
     ax.axis('off')
 
@@ -630,23 +637,9 @@ fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
 
 ## --- sandbox
 '''
-from pactools import Comodulogram
-f0 = np.linspace(0.05, 4, 25)
-f1 = np.linspace(6, 40, 25)
-estimator = Comodulogram(fs=100,
-                         low_fq_range=f0,
-                         high_fq_range=f1,
-                         method='ozkurt',)
-fig,axs = pl.subplots(3,3, figsize=(15,9))
-axs = axs.ravel()
-ax_idx = 0
-for phl, ps0, ps1 in zip(phase_levels, phase_starts, np.append(phase_starts[1:], eeg_time[-1])):
-    i0, i1 = t2i([ps0, ps1])
-    sig_for_pac = eeg._data[ch_name_to_idx('Fz'), i0:i1][::5]
-    estimator.fit(sig_for_pac[None,:])
-    estimator.plot(axs=[axs[ax_idx]], vmin=0, vmax=0.11)
-    axs[ax_idx].set_title(phl)
-    ax_idx += 1
-fig.savefig(f'/Users/bdd/Desktop/{name}_pac.png')
+fig, axs = pl.subplots(1, len(expanded_chirps), figsize=(15,5))
+for (l, c), ax in zip(expanded_chirps, axs):
+    mag = np.mean(c, axis=(1,2))
+    mne.viz.plot_topomap(mag, eeg_chirp.info, axes=ax, show=False)
 '''
 ##
