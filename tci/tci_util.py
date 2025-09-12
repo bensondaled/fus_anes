@@ -346,6 +346,7 @@ class LiveTCI(mp.Process):
         self._inst = mp.Queue()
         
         self.clear_instruction_queue_flag = mp.Value('b', 0)
+        self.clear_holding_level_flag = mp.Value('b', 0)
 
         self.hold_keep_ahead_time = hold_keep_ahead_time
         self.maintain_time_step = maintain_time_step
@@ -470,7 +471,8 @@ class LiveTCI(mp.Process):
 
     def clear_instruction_queue(self):
         self.clear_instruction_queue_flag.value = 1
-        while self.clear_instruction_queue_flag.value:
+        self.clear_holding_level_flag.value = 1
+        while self.clear_instruction_queue_flag.value or self.clear_holding_level_flag.value:
             time.sleep(0.010)
     
     def process_user_requests(self):
@@ -480,6 +482,10 @@ class LiveTCI(mp.Process):
         
         while not self.kill_flag.value:
             try:
+                if clear_holding_level_flag.value:
+                    is_holding_level = False
+                    self.clear_holding_level_flag.value = 0
+
                 kind, params = self.user_request_queue.get(block=False)
 
                 if kind == 'bolus':
@@ -572,6 +578,9 @@ class LiveTCI(mp.Process):
                 pass
 
             # after processing all the new commands in the queue, check if we're holding a level. if we are, then we add commands into the queue if appropriate
+            if clear_holding_level_flag.value:
+                is_holding_level = False
+                self.clear_holding_level_flag.value = 0
             if is_holding_level is not False:
                 hold_target, hold_end_time = is_holding_level
                 if hold_end_time - now(minimal=True) <= self.hold_keep_ahead_time:
