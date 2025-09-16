@@ -5,8 +5,9 @@ import pandas as pd
 import os
 from util import fit_sigmoid2
 from matplotlib.gridspec import GridSpec
+from matplotlib.transforms import blended_transform_factory as blend
 
-anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
+processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
 
 order = [
 
@@ -34,7 +35,8 @@ order = [
 
 ##
 ant = {}
-with h5py.File(anteriorization_path, 'r') as h:
+sq = {}
+with h5py.File(processed_path, 'r') as h:
     print(list(h.keys()))
     for name in np.ravel(order):
         ce = np.array(h[f'{name}_ce']).copy()
@@ -43,24 +45,77 @@ with h5py.File(anteriorization_path, 'r') as h:
         channels = spect_ds.attrs['channels']
         sp_f = spect_ds.attrs['freq']
         ant[name] = [ce, spect, channels, sp_f]
+        
+        sq_dat = np.array(h[f'{name}_squeeze'])
+        ss = np.array(h[f'{name}_squeeze_starts'])
+        sq[name] = sq_dat, ss
 
+## squeeze and LOR stats
+lors = {}
+fig, axs = pl.subplots(1, len(order))
+for idx, names in enumerate(order):
+    ax = axs[idx]
+    for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
+        sqdat, starts = sq[name]
+        ce, yn, ts = sqdat.T
+        
+        starts = np.append(starts, starts[-1]+20*60)
 
-## figure
+        asc = np.arange(len(ce)) <= np.argmax(ce)
+        ce = ce[asc]
+        yn = yn[asc]
+        ts = ts[asc]
+
+        res = []
+
+        for ss, se in zip(starts[:-1], starts[1:]):
+
+            use = (ts>=ss) & (ts<se)
+            if np.all(use == False): continue
+            _yn = yn[use]
+            _ce = ce[use]
+    
+            dat = pd.DataFrame()
+            dat['ce'] = _ce
+            dat['resp'] = _yn
+            dat['bin'] = pd.cut(dat['ce'], bins=2)
+            #assert np.all(dat.groupby('bin', observed=True).count().values[:,0] > 4) # had to have at least 4 squeeze commands in a given level to get a percentage response
+            mean = dat.groupby('bin', as_index=False).mean()
+
+            mean['label'] = mean.bin.apply(lambda x: (x.left+x.right)/2)
+            res.append(mean)
+        
+        res = pd.concat(res)
+        ax.plot(res['label'].values,
+                res['resp'].values,
+                color=col)
+
+        lor = np.where(res.resp.values < 0.5)[0][0] # first time <50 rate recorded
+        lor = res.ce.values[lor]
+        lors[name] = lor
+
+## anteriorization figure
+rise_only = True
 
 gs = GridSpec(1, len(order)*3,
               right=0.98,
               left=0.1,
-              top=0.9,
+              top=0.85,
               bottom=0.25,
               wspace=0.05)
 fig = pl.figure(figsize=(15,3.5))
 all_axs = []
 for idx, names in enumerate(order):
-
-    ax_list = [
-                fig.add_subplot(gs[0, idx*3]),
-                fig.add_subplot(gs[0, idx*3+1]),
-            ]
+    
+    if rise_only:
+        ax_list = [
+                    fig.add_subplot(gs[0, idx*3:idx*3+2]),
+                ]
+    else:
+        ax_list = [
+                    fig.add_subplot(gs[0, idx*3]),
+                    fig.add_subplot(gs[0, idx*3+1]),
+                ]
     all_axs.append(ax_list)
 
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
@@ -80,6 +135,7 @@ for idx, names in enumerate(order):
         total_alpha = np.nanmean(spect_full[is_alpha], axis=0)
         total_delta = np.nanmean(spect_full[is_delta], axis=0)
         total_power = np.nanmean(spect_full, axis=0)
+        ap_ratio = ant_alpha / post_alpha
 
         _to_plot = np.array([ce,
                             ant_alpha,
@@ -87,6 +143,7 @@ for idx, names in enumerate(order):
                             total_alpha,
                             total_delta,
                             total_power,
+                            ap_ratio,
                            ]).T
 
         # include only rising/falling prop levels
@@ -95,14 +152,20 @@ for idx, names in enumerate(order):
         else: # new protocol 2025-09-05
             bins_category = 1
         drop_starts = -(np.where(ce[::-1] > 2.99)[0][0])
-        for direction, ax in zip([1, -1], ax_list):
+
+        if rise_only:
+            dirs = [1]
+        else:
+            dirs = [1,-1]
+
+        for direction, ax in zip(dirs, ax_list):
             if direction == 1:
                 to_plot = _to_plot[:drop_starts] # rising
             elif direction == -1:
                 to_plot = _to_plot[drop_starts:] # falling
             
             # bin them
-            do_bin = False
+            do_bin = True
             if do_bin:
                 to_plot = pd.DataFrame(to_plot)
 
@@ -141,13 +204,19 @@ for idx, names in enumerate(order):
                                 2.7, #2.4 level
                                 ]
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
-                to_plot = to_plot.groupby('bin', as_index=False).mean()
-                to_plot = to_plot.values[:,1:].astype(float)
+                to_plot_mean = to_plot.groupby('bin', as_index=False).mean()
+                to_plot_mean = to_plot_mean.values[:,1:].astype(float)
+                to_plot_err = to_plot.groupby('bin', as_index=False).std()
+                to_plot_err = to_plot_err.values[:,1:].astype(float)
 
                 # or bin them agnostically
                 #to_plot = np.array([np.nanmean(r, axis=0) for r in np.array_split(to_plot, 5, axis=0)])
-
-            c,a,p,ta,td,tp = to_plot.T
+            
+            if do_bin:
+                c,a,p,ta,td,tp,apr = to_plot_mean.T
+                e_c,e_a,e_p,e_ta,e_td,e_tp,e_apr = to_plot_err.T
+            else:
+                c,a,p,ta,td,tp,apr = to_plot.T
 
             keep = ~(np.isnan(a))
             
@@ -157,8 +226,10 @@ for idx, names in enumerate(order):
             ta_ = ta[keep]
             td_ = td[keep]
             tp_ = tp[keep]
+            apr_ = apr[keep]
 
-            show = a_ / p_
+            show = apr_
+            #show = a_ / p_
             #show = a_
             #show = p_
             #show = a_ / ta_
@@ -166,17 +237,26 @@ for idx, names in enumerate(order):
             #show = tp_
             #show = td_
             #show = 10*np.log10(a_ / p_)
-
-            kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
-            
-            ax.scatter(c_, show, **kw)
+                
+            if not do_bin:
+                kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
+                ax.scatter(c_, show, **kw)
+            elif do_bin:
+                ax.errorbar(c_, show,
+                            yerr=e_apr[keep], # NOTE update for plotted variable
+                            marker='o',
+                            color=col,
+                            capsize=5,
+                            markersize=6,
+                            elinewidth=1,
+                            alpha=0.9,
+                            lw=0)
             
             do_fit = True
             if do_fit:
                 xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, show, return_params=True)
-                ax.plot(xv, yv, color=col, lw=1.,
+                ax.plot(xv, yv, color=col, lw=.5,
                     label=f'?{cond}\nA={A:0.1f}\ny0={y0:0.1f}\nx0={ec50:0.1f}',)
-
 
             ax.sharey(all_axs[0][0])
 
@@ -191,13 +271,28 @@ for idx, names in enumerate(order):
                 pl.setp(ax.get_yticklabels(), visible=False)
 
             if direction == 1:
-                ax.set_title(name[-4:])
+                ax.set_title(name[-4:], pad=25)
                 ax.set_xlabel('Propofol conc.', labelpad=20)
-                ax.set_xlim([0, 3.3])
+                ax.set_xlim([-0.3, 3.4])
                 ax.set_xticks(np.arange(0, 3.2, 0.5))
+                ax.tick_params(axis='x', labelsize=8)
             elif direction == -1:
-                ax.set_xlim([3.3, 0])
+                ax.set_xlim([3.4, -0.3])
                 ax.set_xticks(np.arange(0, 3.2, 0.5)[::-1])
                 ax.tick_params(axis='y', length=0)
+                ax.tick_params(axis='x', labelsize=8)
                 ax.spines['left'].set_visible(False)
+
+            show_lor = True
+            if show_lor and direction==1:
+                ax.axvline(lors[name], color=col, lw=2, alpha=0.95, ls=':')
+                ax.text(lors[name], 1.01, 'LOR',
+                        rotation=90,
+                        ha='center',
+                        va='bottom',
+                        alpha=0.5,
+                        fontsize=9,
+                        color=col,
+                        transform=blend(ax.transData, ax.transAxes))
+
 ##

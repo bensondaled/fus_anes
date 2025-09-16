@@ -19,7 +19,7 @@ from threshs import switch_thresh, ssep_thresh
 from timings import us_startstop
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 
@@ -29,7 +29,7 @@ from timings import us_startstop
 #session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
-session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
 
@@ -40,7 +40,7 @@ session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5'
 
 # intermediate data paths
-anteriorization_path = '/Users/bdd/data/fus_anes/intermediate/anteriorization.h5'
+processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
 
 src_dir = os.path.split(session_path)[0]
 name = os.path.splitext(os.path.split(session_path)[-1])[0]
@@ -436,7 +436,7 @@ for lev in np.unique(level_id):
 ce_for_spect = np.array([ce_vals[ce_t2i(t)] for t in sp_t])
 ds0 = f'{name}_ce'
 ds1 = f'{name}_spect'
-with h5py.File(anteriorization_path, 'a') as h:
+with h5py.File(processed_path, 'a') as h:
     if ds0 in h:
         del h[ds0]
     if ds1 in h:
@@ -580,6 +580,24 @@ ax.grid(axis='y')
 #ax.vlines(sq_onset/60, 0, 100, color='red', lw=0.25)
 #ax.vlines(squeeze_times/60, 0, 100, color='green', lw=0.25)
 ax.sharex(ax_prop)
+
+# save squeeze data for other analyses
+res = []
+for sqo in sq_onset+summary_start_time:
+    c = ce_vals[ce_t2i(sqo)]
+    resp = np.any([ st>sqo and st-sqo<1.5 for st in squeeze_times+summary_start_time])
+    res.append([c, resp, sqo])
+res = np.array(res)
+sq_start = squeeze[squeeze.event.str.strip() == 'play'].index.values
+ds0 = f'{name}_squeeze'
+ds1 = f'{name}_squeeze_starts'
+with h5py.File(processed_path, 'a') as h:
+    if ds0 in h:
+        del h[ds0]
+    if ds1 in h:
+        del h[ds1]
+    h.create_dataset(ds0, data=res, compression='lzf')
+    h.create_dataset(ds1, data=sq_start, compression='lzf')
 
 # show chirp and oddball and SSEP
 
