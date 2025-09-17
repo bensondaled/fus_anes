@@ -482,7 +482,7 @@ class LiveTCI(mp.Process):
         
         while not self.kill_flag.value:
             try:
-                if clear_holding_level_flag.value:
+                if self.clear_holding_level_flag.value:
                     is_holding_level = False
                     self.clear_holding_level_flag.value = 0
 
@@ -578,7 +578,7 @@ class LiveTCI(mp.Process):
                 pass
 
             # after processing all the new commands in the queue, check if we're holding a level. if we are, then we add commands into the queue if appropriate
-            if clear_holding_level_flag.value:
+            if self.clear_holding_level_flag.value:
                 is_holding_level = False
                 self.clear_holding_level_flag.value = 0
             if is_holding_level is not False:
