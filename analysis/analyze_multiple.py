@@ -31,6 +31,11 @@ order = [
         '2025-09-12_merge_subject-b006',
          ],
         
+        [
+        '2025-09-17_07-57-44_subject-b002',
+        '2025-09-17_07-57-44_subject-b002',
+         ],
+        
         ]
 
 ##
@@ -95,11 +100,11 @@ for idx, names in enumerate(order):
         lors[name] = lor
 
 ## anteriorization figure
-rise_only = True
+rise_only = False
 
 gs = GridSpec(1, len(order)*3,
-              right=0.98,
-              left=0.1,
+              right=0.99,
+              left=0.05,
               top=0.85,
               bottom=0.25,
               wspace=0.05)
@@ -147,7 +152,7 @@ for idx, names in enumerate(order):
                            ]).T
 
         # include only rising/falling prop levels
-        if ce.max() > 3.1: # original protocol
+        if ce.max() > 3.1 and (name!='2025-09-12_merge_subject-b006'): # original protocol
             bins_category = 0
         else: # new protocol 2025-09-05
             bins_category = 1

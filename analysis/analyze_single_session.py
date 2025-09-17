@@ -19,7 +19,7 @@ from threshs import switch_thresh, ssep_thresh
 from timings import us_startstop
 
 ## Params
-session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
+#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 #session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
 
@@ -38,6 +38,8 @@ session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
 
 #session_path = '/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5' # u/s
 #session_path = '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5'
+
+session_path = '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5'
 
 # intermediate data paths
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
