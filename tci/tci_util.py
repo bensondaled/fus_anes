@@ -428,7 +428,6 @@ class LiveTCI(mp.Process):
         if clear_queue:
             self.clear_instruction_queue()
 
-        self.clear_instruction_queue()
         self.user_request_queue.put(('bolus', [dose, ce]))
     
     @handle_errs
@@ -507,14 +506,16 @@ class LiveTCI(mp.Process):
                     
                     # handle infusion start
                     instruction = (rate, start_time)
-                    self.instruction_queue.put(instruction)
+                    if not self.clear_instruction_queue_flag.value:
+                        self.instruction_queue.put(instruction)
 
                     # handle infusion end if a duration was specified
                     if dur is not None:
                         stop_time = start_time + dur
                         return_rate = previous_rate
                         instruction = (return_rate, stop_time)
-                        self.instruction_queue.put(instruction)
+                        if not self.clear_instruction_queue_flag.value:
+                            self.instruction_queue.put(instruction)
 
                     elif dur is None:
                         is_holding_level = False # if an infusion was specified without an end duration, this is a scenario where we want any ongoing hold to be stopped
@@ -535,7 +536,8 @@ class LiveTCI(mp.Process):
                     cmd_time = start_time + self.new_instruction_delay
                     for rate, dur in zip(rates, durs):
                         instruction = (rate, cmd_time)
-                        self.instruction_queue.put(instruction)
+                        if not self.clear_instruction_queue_flag.value:
+                            self.instruction_queue.put(instruction)
                         cmd_time += dur
                     
                     # now we implement the special logic of holding it there beyond the user's request
@@ -547,7 +549,8 @@ class LiveTCI(mp.Process):
                             cmd_time = now(minimal=True)
 
                         instruction = (rate, cmd_time)
-                        self.instruction_queue.put(instruction)
+                        if not self.clear_instruction_queue_flag.value:
+                            self.instruction_queue.put(instruction)
                         cmd_time += dur
 
                         # notice how the last duration is not incorporated into the instructions, ie it passes on info about when to start, but without any other steps, it will just continue that rate indefinitely
@@ -569,7 +572,8 @@ class LiveTCI(mp.Process):
                     cmd_time = start_time
                     for rate, dur in zip(rates, durs):
                         instruction = (rate, cmd_time)
-                        self.instruction_queue.put(instruction)
+                        if not self.clear_instruction_queue_flag.value:
+                            self.instruction_queue.put(instruction)
                         cmd_time += dur
 
                     is_holding_level = (target, cmd_time)
