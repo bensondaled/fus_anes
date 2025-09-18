@@ -10,6 +10,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
 pl.ion()
 from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
+from mne_connectivity import spectral_connectivity_epochs
 from mne_icalabel import label_components
 
 from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne
@@ -303,6 +304,21 @@ sp = nanpow2db(sp)
 #sp2 = np.nanmedian(spect2, axis=0)
 def spect_t2i(t):
     return np.argmin(np.abs(sp_t - t))
+
+# compute connectivity measures - experimental
+'''
+cdata = eeg_spect._data * 1e6
+cdata = cdata[None,:]
+con = spectral_connectivity_epochs(
+		cdata,
+		method='pli',#'wpli2_debiased',   # dwPLI
+		mode='multitaper',         # multitaper is robust for oscillations
+		sfreq=eeg_spect.info['sfreq'],
+		fmin=8, fmax=15,
+		faverage=True,             # average across band
+		n_jobs=8,
+	).get_data()[:,0]
+'''
 
 # prep the chirp data
 eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)

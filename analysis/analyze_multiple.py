@@ -57,9 +57,9 @@ with h5py.File(processed_path, 'r') as h:
 
 ## squeeze and LOR stats
 lors = {}
-fig, axs = pl.subplots(1, len(order))
+#fig, axs = pl.subplots(1, len(order))
 for idx, names in enumerate(order):
-    ax = axs[idx]
+    #ax = axs[idx]
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
         sqdat, starts = sq[name]
         ce, yn, ts = sqdat.T
@@ -91,16 +91,16 @@ for idx, names in enumerate(order):
             res.append(mean)
         
         res = pd.concat(res)
-        ax.plot(res['label'].values,
-                res['resp'].values,
-                color=col)
+        #ax.plot(res['label'].values,
+        #        res['resp'].values,
+        #        color=col)
 
         lor = np.where(res.resp.values < 0.5)[0][0] # first time <50 rate recorded
         lor = res.ce.values[lor]
         lors[name] = lor
 
 ## anteriorization figure
-rise_only = False
+rise_only = True
 
 gs = GridSpec(1, len(order)*3,
               right=0.99,
@@ -127,28 +127,23 @@ for idx, names in enumerate(order):
         ce, spect, channels, sp_f = ant[name]
 
         is_alpha = (sp_f>=8) & (sp_f<15)
+        is_theta = (sp_f>=4) & (sp_f<8)
         is_delta = (sp_f>=0.8) & (sp_f<4)
+        is_beta = sp_f>20
 
         is_ant = np.isin(channels, ['F3', 'Fz', 'FCz', 'F4'])
         is_post = np.isin(channels, ['P7', 'P3', 'Pz', 'P4', 'P8', 'Oz'])
+
         spect_ant = np.nanmean(spect[is_ant], axis=0)
         spect_post = np.nanmean(spect[is_post], axis=0)
         spect_full = np.nanmean(spect, axis=0)
 
         ant_alpha = np.nanmean(spect_ant[is_alpha], axis=0)
         post_alpha = np.nanmean(spect_post[is_alpha], axis=0)
-        total_alpha = np.nanmean(spect_full[is_alpha], axis=0)
-        total_delta = np.nanmean(spect_full[is_delta], axis=0)
-        total_power = np.nanmean(spect_full, axis=0)
         ap_ratio = ant_alpha / post_alpha
 
         _to_plot = np.array([ce,
-                            ant_alpha,
-                            post_alpha,
-                            total_alpha,
-                            total_delta,
-                            total_power,
-                            ap_ratio,
+                             ap_ratio,
                            ]).T
 
         # include only rising/falling prop levels
@@ -218,37 +213,29 @@ for idx, names in enumerate(order):
                 #to_plot = np.array([np.nanmean(r, axis=0) for r in np.array_split(to_plot, 5, axis=0)])
             
             if do_bin:
-                c,a,p,ta,td,tp,apr = to_plot_mean.T
-                e_c,e_a,e_p,e_ta,e_td,e_tp,e_apr = to_plot_err.T
+                c,apr = to_plot_mean.T
+                e_c,e_apr = to_plot_err.T
             else:
-                c,a,p,ta,td,tp,apr = to_plot.T
+                c,apr = to_plot.T
 
-            keep = ~(np.isnan(a))
+            keep = ~(np.isnan(apr))
             
             c_ = c[keep]
-            a_ = a[keep]
-            p_ = p[keep]
-            ta_ = ta[keep]
-            td_ = td[keep]
-            tp_ = tp[keep]
             apr_ = apr[keep]
+            e_apr_ = e_apr[keep]
 
-            show = apr_
-            #show = a_ / p_
-            #show = a_
-            #show = p_
-            #show = a_ / ta_
-            #show = ta_
-            #show = tp_
-            #show = td_
-            #show = 10*np.log10(a_ / p_)
-                
+            # TEMP TODO
+            #apr_ /= apr_[0]
+            #apr_ = 10*np.log10(apr_)
+            #apr_ -= apr_[0]
+    
             if not do_bin:
                 kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
-                ax.scatter(c_, show, **kw)
+                ax.scatter(c_, apr_, **kw)
             elif do_bin:
-                ax.errorbar(c_, show,
-                            yerr=e_apr[keep], # NOTE update for plotted variable
+                ax.errorbar(c_,
+                            apr_,
+                            yerr=e_apr_,
                             marker='o',
                             color=col,
                             capsize=5,
@@ -259,7 +246,7 @@ for idx, names in enumerate(order):
             
             do_fit = True
             if do_fit:
-                xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, show, return_params=True)
+                xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, apr_, return_params=True)
                 ax.plot(xv, yv, color=col, lw=.5,
                     label=f'?{cond}\nA={A:0.1f}\ny0={y0:0.1f}\nx0={ec50:0.1f}',)
 
