@@ -8,6 +8,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
+prop_quantity = 'cprop' # ce / ceprop
 
 order = [
 
@@ -21,20 +22,16 @@ order = [
         '2025-08-12_09-11-34_subject-b004',],
         
         [
-        #'2025-09-04_08-06-39_subject-b008', # u/s
         '2025-09-05_08-10-33_subject-b008',
-        '2025-09-05_08-10-33_subject-b008',
-         ],
+        '2025-09-19_07-52-47_subject-b008',],
         
         [
         '2025-09-12_merge_subject-b006',
-        '2025-09-12_merge_subject-b006',
-         ],
+        '2025-09-12_merge_subject-b006',],
         
         [
         '2025-09-17_07-57-44_subject-b002',
-        '2025-09-17_07-57-44_subject-b002',
-         ],
+        '2025-09-17_07-57-44_subject-b002',],
         
         ]
 
@@ -42,19 +39,19 @@ order = [
 ant = {}
 sq = {}
 with h5py.File(processed_path, 'r') as h:
-    print(list(h.keys()))
     for name in np.ravel(order):
         ce = np.array(h[f'{name}_ce']).copy()
+        cprop = np.array(h[f'{name}_cprop']).copy()
         spect_ds = h[f'{name}_spect']
         spect = np.array(spect_ds).copy()
         channels = spect_ds.attrs['channels']
         sp_f = spect_ds.attrs['freq']
-        ant[name] = [ce, spect, channels, sp_f]
+        ant[name] = [ce, cprop, spect, channels, sp_f]
         
         sq_dat = np.array(h[f'{name}_squeeze'])
         ss = np.array(h[f'{name}_squeeze_starts'])
         sq[name] = sq_dat, ss
-
+        
 ## squeeze and LOR stats
 lors = {}
 #fig, axs = pl.subplots(1, len(order))
@@ -62,7 +59,12 @@ for idx, names in enumerate(order):
     #ax = axs[idx]
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
         sqdat, starts = sq[name]
-        ce, yn, ts = sqdat.T
+        ce, yn, ts, cprop = sqdat.T
+
+        # -- experimental
+        df = pd.DataFrame(sqdat, columns=['ce','yn','ts','cprop'])
+
+        # -- end experimental
         
         starts = np.append(starts, starts[-1]+20*60)
 
@@ -70,6 +72,7 @@ for idx, names in enumerate(order):
         ce = ce[asc]
         yn = yn[asc]
         ts = ts[asc]
+        cprop = cprop[asc]
 
         res = []
 
@@ -79,10 +82,14 @@ for idx, names in enumerate(order):
             if np.all(use == False): continue
             _yn = yn[use]
             _ce = ce[use]
+            _ts = ts[use]
+            _cprop = cprop[use]
     
             dat = pd.DataFrame()
             dat['ce'] = _ce
             dat['resp'] = _yn
+            dat['ts'] = _ts
+            dat['cprop'] = _cprop
             dat['bin'] = pd.cut(dat['ce'], bins=2)
             #assert np.all(dat.groupby('bin', observed=True).count().values[:,0] > 4) # had to have at least 4 squeeze commands in a given level to get a percentage response
             mean = dat.groupby('bin', as_index=False).mean()
@@ -95,12 +102,16 @@ for idx, names in enumerate(order):
         #        res['resp'].values,
         #        color=col)
 
-        lor = np.where(res.resp.values < 0.5)[0][0] # first time <50 rate recorded
-        lor = res.ce.values[lor]
+        lor = np.where(res.resp.values < 0.5)[0][0] # first time low resp rate recorded
+        if prop_quantity == 'ce':
+            lor = res.ce.values[lor]
+        elif prop_quantity == 'cprop':
+            lor = res.cprop.values[lor]
         lors[name] = lor
 
 ## anteriorization figure
 rise_only = True
+do_bin = True
 
 gs = GridSpec(1, len(order)*3,
               right=0.99,
@@ -124,9 +135,11 @@ for idx, names in enumerate(order):
     all_axs.append(ax_list)
 
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
-        ce, spect, channels, sp_f = ant[name]
+        ce, cprop, spect, channels, sp_f = ant[name]
 
-        is_alpha = (sp_f>=8) & (sp_f<15)
+        _pq = ce if prop_quantity=='ce' else cprop
+
+        is_alpha = (sp_f>=8) & (sp_f<20)
         is_theta = (sp_f>=4) & (sp_f<8)
         is_delta = (sp_f>=0.8) & (sp_f<4)
         is_beta = sp_f>20
@@ -142,15 +155,19 @@ for idx, names in enumerate(order):
         post_alpha = np.nanmean(spect_post[is_alpha], axis=0)
         ap_ratio = ant_alpha / post_alpha
 
-        _to_plot = np.array([ce,
-                             ap_ratio,
+        _to_plot = np.array([
+                            _pq,
+                            ap_ratio,
                            ]).T
 
         # include only rising/falling prop levels
-        if ce.max() > 3.1 and (name!='2025-09-12_merge_subject-b006'): # original protocol
-            bins_category = 0
-        else: # new protocol 2025-09-05
-            bins_category = 1
+        if prop_quantity == 'ce':
+            if ce.max() > 3.1 and (name!='2025-09-12_merge_subject-b006'): # original protocol
+                bins_category = 0
+            else: # new protocol 2025-09-05
+                bins_category = 1
+        elif prop_quantity == 'cprop':
+            bins_category = 2
         drop_starts = -(np.where(ce[::-1] > 2.99)[0][0])
 
         if rise_only:
@@ -165,7 +182,6 @@ for idx, names in enumerate(order):
                 to_plot = _to_plot[drop_starts:] # falling
             
             # bin them
-            do_bin = True
             if do_bin:
                 to_plot = pd.DataFrame(to_plot)
 
@@ -188,6 +204,8 @@ for idx, names in enumerate(order):
                                 2.75, #3.0 level
                                 3.25, #3.0 level
                                 ]
+                    elif bins_category == 2:
+                        bins = 30
                 elif direction == -1:
                     if bins_category == 0:
                         bins = [-0.01,
@@ -203,6 +221,8 @@ for idx, names in enumerate(order):
                                 2.1, #1.8 level
                                 2.7, #2.4 level
                                 ]
+                    elif bins_category == 2:
+                        bins = 30
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
                 to_plot_mean = to_plot.groupby('bin', as_index=False).mean()
                 to_plot_mean = to_plot_mean.values[:,1:].astype(float)
@@ -222,12 +242,14 @@ for idx, names in enumerate(order):
             
             c_ = c[keep]
             apr_ = apr[keep]
-            e_apr_ = e_apr[keep]
+            if do_bin:
+                e_apr_ = e_apr[keep]
+            else:
+                e_apr_ = None
 
             # TEMP TODO
-            #apr_ /= apr_[0]
-            #apr_ = 10*np.log10(apr_)
-            #apr_ -= apr_[0]
+            apr_ = 10*np.log10(apr_)
+            apr_ -= apr_[0]
     
             if not do_bin:
                 kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
@@ -265,12 +287,12 @@ for idx, names in enumerate(order):
             if direction == 1:
                 ax.set_title(name[-4:], pad=25)
                 ax.set_xlabel('Propofol conc.', labelpad=20)
-                ax.set_xlim([-0.3, 3.4])
-                ax.set_xticks(np.arange(0, 3.2, 0.5))
+                #ax.set_xlim([-0.3, 3.4])
+                #ax.set_xticks(np.arange(0, 3.2, 0.5))
                 ax.tick_params(axis='x', labelsize=8)
             elif direction == -1:
-                ax.set_xlim([3.4, -0.3])
-                ax.set_xticks(np.arange(0, 3.2, 0.5)[::-1])
+                #ax.set_xlim([3.4, -0.3])
+                #ax.set_xticks(np.arange(0, 3.2, 0.5)[::-1])
                 ax.tick_params(axis='y', length=0)
                 ax.tick_params(axis='x', labelsize=8)
                 ax.spines['left'].set_visible(False)

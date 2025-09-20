@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import h5py
 import mne
-import os
+import os, sys
 import json
 import matplotlib.pyplot as pl
 from matplotlib.gridspec import GridSpec
@@ -20,27 +20,38 @@ from threshs import switch_thresh, ssep_thresh
 from timings import us_startstop
 
 ## Params
-#session_path = '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5'
+sessions = [
+    '/Users/bdd/data/fus_anes/2025-07-23_12-05-45_subject-b001.h5', # 0,
+    '/Users/bdd/data/fus_anes/2025-08-05_11-52-41_subject-b001.h5', # 1,
 
-#session_path = '/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5'
+    '/Users/bdd/data/fus_anes/2025-07-30_merge_subject-b004.h5',    # 2,
+    '/Users/bdd/data/fus_anes/2025-08-12_09-11-34_subject-b004.h5', # 3,
 
-#session_path = '/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5'
-#session_path = '/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5'
+    '/Users/bdd/data/fus_anes/2025-07-25_08-38-29_subject-b003.h5', # 4,
+    '/Users/bdd/data/fus_anes/2025-08-29_08-54-34_subject-b003.h5', # 5,
 
-#session_path = '/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5'
+    '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5', # 6,
+    '/Users/bdd/data/fus_anes/2025-09-19_07-52-47_subject-b008.h5', # 7,
 
-#session_path = '/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5' # u/s
-#session_path = '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5'
+    '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5',    # 8,
 
-session_path = '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5'
+    '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5', # 9
+    
+    #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5', # u/s
+    ]
+
+try:
+    selection = int(sys.argv[1]) # argument-based
+except:
+    selection = 0 # manual within-script selection
+
+session_path = sessions[selection]
 
 # intermediate data paths
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
@@ -178,6 +189,7 @@ switch = eeg_switch._data[switch_channel]
 if not is_us_session:
     goto = tci_cmd[tci_cmd.kind == 'goto']
     _p_target = goto.ce_target
+    _p_target = pd.DataFrame(_p_target).drop_duplicates(keep='first').ce_target
 else:
     # for ultrasound sessions, mock label as prop 0 vs 1 for pre-post respectively
     _p_target = pd.Series([1, 2], index=us_startstop[name])
@@ -220,7 +232,7 @@ if not is_us_session:
     lev = []
     while sec < endtime:
         while pidx<len(pump) and sec >= pump.index.values[pidx]:
-            rate = pump.iloc[pidx].rate
+            rate = pump.iloc[pidx].rate # ml/min
             rate = 10000 * rate / sconfig['weight']
             t.infuse(rate)
             t.wait(1)
@@ -251,6 +263,28 @@ def ce_t2i(t):
     else:
         return np.argmin(np.abs(t - ce_time))
 
+
+if not is_us_session:
+    cumulative_prop = []
+    cumulative_prop_time = []
+    t0s = pump.index.values
+    t0s = np.append(t0s, t0s[-1]+60*10)
+    rates = pump.rate.values # ml/min
+    for t0, t1, rate in zip(t0s[:-1], t0s[1:], rates[:-1]):
+        ndeci = int(np.round(10.0 * (t1-t0)))
+        for deci in range(ndeci): # deciseconds
+            ml = (rate / 60.0) / 10.0
+            mg = ml * 10.0
+            cumulative_prop.append(mg)
+            cumulative_prop_time.append(t0+deci/10.0)
+    cumulative_prop = np.cumsum(cumulative_prop)
+    cumulative_prop_time = np.array(cumulative_prop_time)
+
+    def cprop_t2i(t):
+        if isinstance(t, (list, np.ndarray)):
+            return np.array([cprop_t2i(x) for x in t])
+        else:
+            return np.argmin(np.abs(t - cumulative_prop_time))
 
 # ---- Analyses
 
@@ -296,7 +330,7 @@ keep = (sp_f <= 30) & (sp_f > 0.5) # max frequency to show/analyze
 spect = spect[:,keep,:]
 sp_f = sp_f[keep]
 sp = np.nanmedian(spect, axis=0)
-alpha = (sp_f>=8) & (sp_f<15)
+alpha = (sp_f>=8) & (sp_f<18)
 delta = (sp_f>=0.8) & (sp_f<4)
 
 sp = nanpow2db(sp)
@@ -452,18 +486,23 @@ for lev in np.unique(level_id):
 
 # anteriorization analysis
 ce_for_spect = np.array([ce_vals[ce_t2i(t)] for t in sp_t])
+cprop_for_spect = np.array([cumulative_prop[cprop_t2i(t)] for t in sp_t])
 ds0 = f'{name}_ce'
 ds1 = f'{name}_spect'
+ds2 = f'{name}_cprop'
 with h5py.File(processed_path, 'a') as h:
     if ds0 in h:
         del h[ds0]
     if ds1 in h:
         del h[ds1]
+    if ds2 in h:
+        del h[ds2]
     h.create_dataset(ds0, data=ce_for_spect, compression='lzf')
     ds = h.create_dataset(ds1, data=spect, compression='lzf')
     ds.attrs['channels'] = eeg_spect.ch_names
     ds.attrs['freq'] = sp_f
     ds.attrs['time'] = sp_t
+    h.create_dataset(ds2, data=cprop_for_spect, compression='lzf')
 
 ## display the summary
 
@@ -560,7 +599,7 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
         transform=ax.transAxes)
 
 # show squeeze
-chunk_dt = 60
+chunk_dt = 25
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
@@ -601,21 +640,31 @@ ax.sharex(ax_prop)
 
 # save squeeze data for other analyses
 res = []
+allowed_delay = 1.0 # secs, max secs from command to squeeze
 for sqo in sq_onset+summary_start_time:
     c = ce_vals[ce_t2i(sqo)]
-    resp = np.any([ st>sqo and st-sqo<1.5 for st in squeeze_times+summary_start_time])
-    res.append([c, resp, sqo])
+    cum = cumulative_prop[cprop_t2i(sqo)]
+    resp = np.any([ st>sqo and st-sqo<allowed_delay for st in squeeze_times+summary_start_time])
+    res.append([c, resp, sqo, cum])
 res = np.array(res)
 sq_start = squeeze[squeeze.event.str.strip() == 'play'].index.values
 ds0 = f'{name}_squeeze'
 ds1 = f'{name}_squeeze_starts'
+ds2 = f'{name}_cumprop_time'
+ds3 = f'{name}_cumprop_vals'
 with h5py.File(processed_path, 'a') as h:
     if ds0 in h:
         del h[ds0]
     if ds1 in h:
         del h[ds1]
+    if ds2 in h:
+        del h[ds2]
+    if ds3 in h:
+        del h[ds3]
     h.create_dataset(ds0, data=res, compression='lzf')
     h.create_dataset(ds1, data=sq_start, compression='lzf')
+    h.create_dataset(ds2, data=cumulative_prop_time, compression='lzf')
+    h.create_dataset(ds3, data=cumulative_prop, compression='lzf')
 
 # show chirp and oddball and SSEP
 
