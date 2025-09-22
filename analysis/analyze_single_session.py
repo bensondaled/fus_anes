@@ -13,7 +13,7 @@ from mne.preprocessing import ICA, create_eog_epochs, create_ecg_epochs
 from mne_connectivity import spectral_connectivity_epochs
 from mne_icalabel import label_components
 
-from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne
+from util import mts, filter_eeg, detect_switch, nanpow2db, fit_sigmoid, mts_mne, make_sq_probability
 from fus_anes.constants import MONTAGE as channel_names
 from fus_anes.tci import TCI_Propofol as TCI
 from threshs import switch_thresh, ssep_thresh
@@ -520,6 +520,12 @@ ax.set_ylabel('Propofol\nlevel')
 ax.set_yticks(np.arange(0, 3.5, 1.0))
 ax.set_xlim([0, total_mins])
 ax.grid(True)
+ax_cprop = ax.twinx()
+ax_cprop.plot((cumulative_prop_time-summary_start_time)/60,
+              cumulative_prop,
+              color='dimgrey',
+              lw=2.5)
+ax_cprop.set_ylabel('Cumulative\npropofol')
 ax_prop = ax
 
 # show spect
@@ -599,7 +605,7 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
         transform=ax.transAxes)
 
 # show squeeze
-chunk_dt = 20
+chunk_dt = 30
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
@@ -665,6 +671,14 @@ with h5py.File(processed_path, 'a') as h:
     h.create_dataset(ds1, data=sq_start, compression='lzf')
     h.create_dataset(ds2, data=cumulative_prop_time, compression='lzf')
     h.create_dataset(ds3, data=cumulative_prop, compression='lzf')
+
+# show estimated sq prob
+sqp_time, sq_prob = make_sq_probability(res.T[1], res.T[2], win_width=20.0)
+sq_prob = pd.Series(sq_prob).interpolate().values
+ax = ax.twinx()
+ax.plot((sqp_time-summary_start_time)/60, sq_prob,
+        color='pink')
+ax.set_ylabel('p(sq)')
 
 # show chirp and oddball and SSEP
 

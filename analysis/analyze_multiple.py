@@ -9,6 +9,7 @@ from matplotlib.transforms import blended_transform_factory as blend
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
 prop_quantity = 'cprop' # ce / cprop / cce
+lor_fraction_thresh = 0.5
 
 order = [
 
@@ -95,7 +96,7 @@ for idx, names in enumerate(order):
 
         dat = dat.interpolate()
 
-        lor = np.where(dat.sq_p.values < 0.5)[0][0] # first time low resp rate recorded
+        lor = np.where(dat.sq_p.values < lor_fraction_thresh)[0][0] # first time low resp rate recorded
         #lor = np.where(dat.sq_p.values >= 0.8)[0][-1] 
         lor = dat[prop_quantity].values[lor]
         lors[name] = lor
