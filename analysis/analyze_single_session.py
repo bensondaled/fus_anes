@@ -49,7 +49,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 0 # manual within-script selection
+    selection = 4 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -599,7 +599,7 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
         transform=ax.transAxes)
 
 # show squeeze
-chunk_dt = 25
+chunk_dt = 20
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
 max_lag = 1.0 # secs
