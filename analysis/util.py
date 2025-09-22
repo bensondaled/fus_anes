@@ -124,13 +124,13 @@ def mts_mne(eeg, window_size=30.0):
 
     return psd, times, freqs
 
-def make_sq_probability(yn, ts, win_width=10.0):
+def make_sq_probability(yn, ts, win_width=30.0, min_samples=5):
     # given markers of did/didnt squeeze, and timestamps associated with them, compute a smooth measure of squeeze probability. do this by making a uniform time array over the full time range, then ask for each time step, what is the avg hit rate in a window surrounding it. if window is empty, use nan
     uts = np.arange(ts[0], ts[-1]+1, 1.0)
     res = []
     for ti in uts:
         use = np.abs(ti-ts) <= win_width//2 # half win width because looking in both directions
-        if np.sum(use) == 0:
+        if np.sum(use) < min_samples:
             res.append(np.nan)
         else:
             res.append(np.mean(yn[use]))

@@ -3,12 +3,12 @@ import h5py
 import numpy as np
 import pandas as pd
 import os
-from util import fit_sigmoid2
+from util import fit_sigmoid2, make_sq_probability
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
-prop_quantity = 'cce' # ce / cprop / cce
+prop_quantity = 'cprop' # ce / cprop / cce
 
 order = [
 
@@ -63,15 +63,6 @@ for idx, names in enumerate(order):
         ce, yn, ts, cprop = sqdat.T
         cce = np.cumsum(ce)
 
-        sqp_time, sq_prob = make_sq_probability(yn, ts)
-
-        # -- experimental
-        df = pd.DataFrame(sqdat, columns=['ce','yn','ts','cprop'])
-
-        # -- end experimental
-        
-        starts = np.append(starts, starts[-1]+20*60)
-        
         asc = np.arange(len(ce)) <= np.argmax(ce)
         ce = ce[asc]
         cce = cce[asc]
@@ -79,55 +70,59 @@ for idx, names in enumerate(order):
         ts = ts[asc]
         cprop = cprop[asc]
 
-        res = []
+        sqp_time, sq_prob = make_sq_probability(yn, ts, win_width=20.0)
+        ts_match = np.array([np.argmin(np.abs(t-sqp_time)) for t in ts])
 
-        for ss, se in zip(starts[:-1], starts[1:]):
+        dat = pd.DataFrame()
+        dat['ts'] = sqp_time
+        dat['sq_p'] = sq_prob
 
-            use = (ts>=ss) & (ts<se)
-            if np.all(use == False): continue
-            _yn = yn[use]
-            _ce = ce[use]
-            _cce = cce[use]
-            _ts = ts[use]
-            _cprop = cprop[use]
-    
-            dat = pd.DataFrame()
-            dat['ce'] = _ce
-            dat['cce'] = _cce
-            dat['resp'] = _yn
-            dat['ts'] = _ts
-            dat['cprop'] = _cprop
-            if prop_quantity == 'ce':
-                dat['bin'] = pd.cut(dat['ce'], bins=2)
-            elif prop_quantity == 'cce':
-                dat['bin'] = pd.cut(dat['cce'], bins=10)
-            elif prop_quantity == 'cprop':
-                dat['bin'] = pd.cut(dat['cprop'], bins=10)
-            #assert np.all(dat.groupby('bin', observed=True).count().values[:,0] > 4) # had to have at least 4 squeeze commands in a given level to get a percentage response
-            mean = dat.groupby('bin', as_index=False).mean()
+        _ce = np.nan * np.zeros_like(sqp_time)
+        _ce[ts_match] = ce
+        dat['ce'] = _ce
 
-            mean['label'] = mean.bin.apply(lambda x: (x.left+x.right)/2)
-            res.append(mean)
-        
-        res = pd.concat(res)
-        #ax.plot(res['label'].values,
-        #        res['resp'].values,
-        #        color=col)
+        _cce = np.nan * np.zeros_like(sqp_time)
+        _cce[ts_match] = cce
+        dat['cce'] = _cce
 
-        #lor = np.where(res.resp.values < 0.5)[0][0] # first time low resp rate recorded
-        lor = np.where(res.resp.values >= 0.9)[0][-1] # last time high rate recorded; only works when using ascending-only times, as we are
-        if prop_quantity == 'ce':
-            lor = res.ce.values[lor]
-        elif prop_quantity == 'cce':
-            lor = res.cce.values[lor]
-        elif prop_quantity == 'cprop':
-            lor = res.cprop.values[lor]
+        _cprop = np.nan * np.zeros_like(sqp_time)
+        _cprop[ts_match] = cprop
+        dat['cprop'] = _cprop
+
+        #dat['bin'] = pd.cut(dat[prop_quantity], bins=2)
+        #mean = dat.groupby('bin', as_index=False).mean()
+        #mean['label'] = mean.bin.apply(lambda x: (x.left+x.right)/2)
+
+        dat = dat.interpolate()
+
+        lor = np.where(dat.sq_p.values < 0.5)[0][0] # first time low resp rate recorded
+        #lor = np.where(dat.sq_p.values >= 0.8)[0][-1] 
+        lor = dat[prop_quantity].values[lor]
         lors[name] = lor
+
+## lor figure
+fig, ax = pl.subplots(figsize=(4,5),
+                      gridspec_kw=dict(left=0.2))
+
+for s0, s1 in order:
+    if s0 == s1: continue
+    if s0.endswith('b001'): continue
+    l0 = lors[s0]
+    l1 = lors[s1]
+    ax.plot([0,1], [l0, l1], marker='o',
+            label=s0[-4:])
+
+ax.set_xticks([0,1])
+ax.set_xticklabels(['Session 0', 'Session 1'])
+pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentration', cprop='cumulative propofol (mg)')
+ax.set_ylabel(f'{pql[prop_quantity]} at LOR')
+ax.legend()
 
 ## anteriorization figure
 rise_only = True
 do_bin = True
-show_lor = True
+show_lor = False 
+do_fit = False
 
 gs = GridSpec(1, len(order)*3,
               right=0.99,
@@ -231,7 +226,7 @@ for idx, names in enumerate(order):
                                 3.25, #3.0 level
                                 ]
                     elif bins_category == 2:
-                        bins = 10
+                        bins = 20
                 elif direction == -1:
                     if bins_category == 0:
                         bins = [-0.01,
@@ -248,7 +243,7 @@ for idx, names in enumerate(order):
                                 2.7, #2.4 level
                                 ]
                     elif bins_category == 2:
-                        bins = 10
+                        bins = 20
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
                 to_plot_mean = to_plot.groupby('bin', as_index=False).mean()
                 to_plot_mean = to_plot_mean.values[:,1:].astype(float)
@@ -275,7 +270,8 @@ for idx, names in enumerate(order):
 
             # TEMP TODO
             apr_ = 10*np.log10(apr_)
-            apr_ -= apr_[-1]
+            #apr_ -= apr_[-1]
+            apr_ -= apr_[0]
     
             if not do_bin:
                 kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
@@ -292,7 +288,6 @@ for idx, names in enumerate(order):
                             alpha=0.9,
                             lw=0)
             
-            do_fit = False
             if do_fit:
                 xv, yv, (A,y0,ec50,B) = fit_sigmoid2(c_, apr_, return_params=True)
                 ax.plot(xv, yv, color=col, lw=.5,
