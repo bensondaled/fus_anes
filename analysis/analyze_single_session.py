@@ -36,6 +36,7 @@ sessions = [
     '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5',    # 8,
 
     '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5', # 9
+    '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 10
     
     #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5', # u/s
@@ -49,7 +50,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 4 # manual within-script selection
+    selection = 10 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -646,7 +647,7 @@ ax.sharex(ax_prop)
 
 # save squeeze data for other analyses
 res = []
-allowed_delay = 1.0 # secs, max secs from command to squeeze
+allowed_delay = 2.0 # secs, max secs from command to squeeze
 for sqo in sq_onset+summary_start_time:
     c = ce_vals[ce_t2i(sqo)]
     cum = cumulative_prop[cprop_t2i(sqo)]

@@ -2,10 +2,12 @@
 import h5py
 import numpy as np
 import pandas as pd
-import os
+import os, warnings
 from util import fit_sigmoid2, make_sq_probability
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
+
+warnings.simplefilter("ignore", category=RuntimeWarning)
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
 prop_quantity = 'cprop' # ce / cprop / cce
@@ -32,7 +34,7 @@ order = [
         
         [
         '2025-09-17_07-57-44_subject-b002',
-        '2025-09-17_07-57-44_subject-b002',],
+        '2025-09-23_07-51-59_subject-b002',],
         
         ]
 
@@ -121,9 +123,11 @@ ax.legend()
 
 ## anteriorization figure
 rise_only = True
-do_bin = True
-show_lor = False 
+do_bin = False
+do_log = False
+norm_to = 'first' # first / last / none
 do_fit = False
+show_lor = False 
 
 gs = GridSpec(1, len(order)*3,
               right=0.99,
@@ -148,6 +152,14 @@ for idx, names in enumerate(order):
 
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
         ce, cce, cprop, spect, channels, sp_f = ant[name]
+
+        # TEMP can consider only working on specific subsets of these data
+        #keep = ce>0
+        #ce = ce[keep]
+        #cce = cce[keep]
+        #cprop = cprop[keep]
+        #spect = spect[...,keep]
+        # END TEMP
 
         if prop_quantity == 'ce':
             _pq = ce
@@ -227,7 +239,7 @@ for idx, names in enumerate(order):
                                 3.25, #3.0 level
                                 ]
                     elif bins_category == 2:
-                        bins = 20
+                        bins = 10
                 elif direction == -1:
                     if bins_category == 0:
                         bins = [-0.01,
@@ -244,11 +256,11 @@ for idx, names in enumerate(order):
                                 2.7, #2.4 level
                                 ]
                     elif bins_category == 2:
-                        bins = 20
+                        bins = 10
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
-                to_plot_mean = to_plot.groupby('bin', as_index=False).mean()
+                to_plot_mean = to_plot.groupby('bin', as_index=False, observed=False).mean()
                 to_plot_mean = to_plot_mean.values[:,1:].astype(float)
-                to_plot_err = to_plot.groupby('bin', as_index=False).std()
+                to_plot_err = to_plot.groupby('bin', as_index=False, observed=False).std()
                 to_plot_err = to_plot_err.values[:,1:].astype(float)
 
                 # or bin them agnostically
@@ -269,10 +281,19 @@ for idx, names in enumerate(order):
             else:
                 e_apr_ = None
 
-            # TEMP TODO
-            apr_ = 10*np.log10(apr_)
-            #apr_ -= apr_[-1]
-            apr_ -= apr_[0]
+            # TEMP
+            if do_log:
+                apr_ = 10*np.log10(apr_)
+                norm_fxn = np.subtract
+            else:
+                norm_fxn = np.divide
+
+            if norm_to == 'first':
+                apr_ = norm_fxn(apr_, apr_[0])
+            elif norm_to == 'last':
+                apr_ = norm_fxn(apr_, apr_[-1])
+            elif norm_to is None or norm_to == 'none':
+                pass
     
             if not do_bin:
                 kw = dict(s=15, marker='o', color=col, alpha=0.5, lw=0)
@@ -309,12 +330,14 @@ for idx, names in enumerate(order):
             if direction == 1:
                 ax.set_title(name[-4:], pad=25)
                 ax.set_xlabel('Propofol conc.', labelpad=20)
-                #ax.set_xlim([-0.3, 3.4])
-                #ax.set_xticks(np.arange(0, 3.2, 0.5))
+                if prop_quantity == 'ce':
+                    ax.set_xlim([-0.3, 3.4])
+                    ax.set_xticks(np.arange(0, 3.2, 0.5))
                 ax.tick_params(axis='x', labelsize=8)
             elif direction == -1:
-                #ax.set_xlim([3.4, -0.3])
-                #ax.set_xticks(np.arange(0, 3.2, 0.5)[::-1])
+                if prop_quantity == 'ce':
+                    ax.set_xlim([3.4, -0.3])
+                    ax.set_xticks(np.arange(0, 3.2, 0.5)[::-1])
                 ax.tick_params(axis='y', length=0)
                 ax.tick_params(axis='x', labelsize=8)
                 ax.spines['left'].set_visible(False)
