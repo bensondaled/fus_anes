@@ -50,7 +50,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 10 # manual within-script selection
+    selection = 0 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -202,7 +202,14 @@ def t_to_phase_idx(t):
         edges = _p_target.index.values
         return np.searchsorted(edges, t)
 
-phase_starts = np.append(eeg_time[0], _p_target.index.values)
+bl_done = markers[markers.text.str.strip() == 'baseline_eyes complete'].iloc[0].t
+phase0_start = markers[markers.text.str.strip() == 'steady start']
+if len(phase0_start):
+    phase0_start = phase0_start.iloc[0].t
+else:
+    phase0_start = bl_done + 60.0
+assert phase0_start > bl_done and phase0_start - bl_done < 20*60
+phase_starts = np.append(bl_done, _p_target.index.values)
 phase_levels = np.append(0, _p_target.values)
 
 prop_rising = np.arange(len(phase_levels)) <= np.argmax(phase_levels)
@@ -268,9 +275,15 @@ def ce_t2i(t):
 if not is_us_session:
     cumulative_prop = []
     cumulative_prop_time = []
+
     t0s = pump.index.values
     t0s = np.append(t0s, t0s[-1]+60*10)
     rates = pump.rate.values # ml/min
+    
+    # period before pump, ie level of 0
+    t0s = np.append(t0s[0]-60*10, t0s)
+    rates = np.append(0, rates)
+
     for t0, t1, rate in zip(t0s[:-1], t0s[1:], rates[:-1]):
         ndeci = int(np.round(10.0 * (t1-t0)))
         for deci in range(ndeci): # deciseconds
@@ -491,6 +504,7 @@ cprop_for_spect = np.array([cumulative_prop[cprop_t2i(t)] for t in sp_t])
 ds0 = f'{name}_ce'
 ds1 = f'{name}_spect'
 ds2 = f'{name}_cprop'
+ds3 = f'{name}_phases'
 with h5py.File(processed_path, 'a') as h:
     if ds0 in h:
         del h[ds0]
@@ -498,12 +512,15 @@ with h5py.File(processed_path, 'a') as h:
         del h[ds1]
     if ds2 in h:
         del h[ds2]
-    h.create_dataset(ds0, data=ce_for_spect, compression='lzf')
+    if ds3 in h:
+        del h[ds3]
     ds = h.create_dataset(ds1, data=spect, compression='lzf')
     ds.attrs['channels'] = eeg_spect.ch_names
     ds.attrs['freq'] = sp_f
     ds.attrs['time'] = sp_t
+    h.create_dataset(ds0, data=ce_for_spect, compression='lzf')
     h.create_dataset(ds2, data=cprop_for_spect, compression='lzf')
+    h.create_dataset(ds3, data=[[spect_t2i(ps) for ps in phase_starts], phase_starts, phase_levels], compression='lzf')
 
 ## display the summary
 
@@ -647,7 +664,7 @@ ax.sharex(ax_prop)
 
 # save squeeze data for other analyses
 res = []
-allowed_delay = 2.0 # secs, max secs from command to squeeze
+allowed_delay = 1.5 # secs, max secs from command to squeeze
 for sqo in sq_onset+summary_start_time:
     c = ce_vals[ce_t2i(sqo)]
     cum = cumulative_prop[cprop_t2i(sqo)]

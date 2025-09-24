@@ -6,6 +6,7 @@ import os, warnings
 from util import fit_sigmoid2, make_sq_probability
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
+from cycler import cycler
 
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
@@ -45,12 +46,13 @@ with h5py.File(processed_path, 'r') as h:
     for name in np.ravel(order):
         ce = np.array(h[f'{name}_ce']).copy()
         cprop = np.array(h[f'{name}_cprop']).copy()
+        phase_info = np.array(h[f'{name}_phases']).copy()
         spect_ds = h[f'{name}_spect']
         spect = np.array(spect_ds).copy()
         channels = spect_ds.attrs['channels']
         sp_f = spect_ds.attrs['freq']
         cce = np.cumsum(ce)
-        ant[name] = [ce, cce, cprop, spect, channels, sp_f]
+        ant[name] = [ce, cce, cprop, spect, channels, sp_f, phase_info]
         
         sq_dat = np.array(h[f'{name}_squeeze'])
         ss = np.array(h[f'{name}_squeeze_starts'])
@@ -106,6 +108,15 @@ for idx, names in enumerate(order):
 ## lor figure
 fig, ax = pl.subplots(figsize=(4,5),
                       gridspec_kw=dict(left=0.2))
+colors = [
+    "#0072B2",  # blue
+    "#E69F00",  # orange
+    "#009E73",  # green
+    "#D55E00",  # vermillion
+    "#CC79A7",  # pink
+    "#F0E442",  # yellow
+]
+ax.set_prop_cycle(cycler(color=colors))
 
 for s0, s1 in order:
     if s0 == s1: continue
@@ -116,15 +127,16 @@ for s0, s1 in order:
             label=s0[-4:])
 
 ax.set_xticks([0,1])
-ax.set_xticklabels(['Session 0', 'Session 1'])
-pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentration', cprop='cumulative propofol (mg)')
-ax.set_ylabel(f'{pql[prop_quantity]} at LOR')
+ax.set_xticklabels(['Unfocused', 'CMT'])
+pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentration', cprop='cumulative mg propofol')
+ax.set_ylabel(f'{pql[prop_quantity]} at loss-of-response')
 ax.legend()
 
 ## anteriorization figure
+main_quantity = 'ap_ratio' # ap_ratio, aa, pa, ta
 rise_only = True
-do_bin = False
-do_log = False
+do_bin = True
+do_log = True
 norm_to = 'first' # first / last / none
 do_fit = False
 show_lor = False 
@@ -151,14 +163,14 @@ for idx, names in enumerate(order):
     all_axs.append(ax_list)
 
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
-        ce, cce, cprop, spect, channels, sp_f = ant[name]
+        ce, cce, cprop, spect, channels, sp_f, phase_info = ant[name]
 
         # TEMP can consider only working on specific subsets of these data
-        #keep = ce>0
-        #ce = ce[keep]
-        #cce = cce[keep]
-        #cprop = cprop[keep]
-        #spect = spect[...,keep]
+        keep = np.arange(len(ce)) >= phase_info[0][0] # the true beginning of level-0
+        ce = ce[keep]
+        cce = cce[keep]
+        cprop = cprop[keep]
+        spect = spect[...,keep]
         # END TEMP
 
         if prop_quantity == 'ce':
@@ -185,7 +197,14 @@ for idx, names in enumerate(order):
         total_alpha = np.nanmean(spect_full[is_alpha], axis=0)
         total_power = np.nanmean(spect_full, axis=0)
 
-        ap_ratio = ant_alpha / post_alpha
+        if main_quantity == 'ap_ratio':
+            ap_ratio = ant_alpha / post_alpha
+        elif main_quantity == 'aa':
+            ap_ratio = ant_alpha
+        elif main_quantity == 'pa':
+            ap_ratio = post_alpha
+        elif main_quantity == 'ta':
+            ap_ratio = total_alpha
 
         _to_plot = np.array([
                             _pq,
@@ -239,7 +258,7 @@ for idx, names in enumerate(order):
                                 3.25, #3.0 level
                                 ]
                     elif bins_category == 2:
-                        bins = 10
+                        bins = 20
                 elif direction == -1:
                     if bins_category == 0:
                         bins = [-0.01,
@@ -256,7 +275,7 @@ for idx, names in enumerate(order):
                                 2.7, #2.4 level
                                 ]
                     elif bins_category == 2:
-                        bins = 10
+                        bins = 20
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
                 to_plot_mean = to_plot.groupby('bin', as_index=False, observed=False).mean()
                 to_plot_mean = to_plot_mean.values[:,1:].astype(float)
@@ -329,7 +348,7 @@ for idx, names in enumerate(order):
 
             if direction == 1:
                 ax.set_title(name[-4:], pad=25)
-                ax.set_xlabel('Propofol conc.', labelpad=20)
+                ax.set_xlabel(f'Propofol {prop_quantity}', labelpad=20)
                 if prop_quantity == 'ce':
                     ax.set_xlim([-0.3, 3.4])
                     ax.set_xticks(np.arange(0, 3.2, 0.5))
