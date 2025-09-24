@@ -50,7 +50,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 0 # manual within-script selection
+    selection = 10 # manual within-script selection
 
 session_path = sessions[selection]
 
