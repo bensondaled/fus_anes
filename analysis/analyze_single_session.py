@@ -39,18 +39,22 @@ sessions = [
     '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 10
     
     #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
-    #'/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5', # u/s
-    #'/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5', # u/s
-    #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-16_07-48-02_subject-b002.h5', # u/s
+    '/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
+    
     ]
 
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 10 # manual within-script selection
+    selection = 11 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -90,6 +94,8 @@ with pd.HDFStore(session_path, 'r') as h:
 
 sconfig = json.loads(sconfig.iloc[0])
 
+if name == '2025-09-16_07-48-02_subject-b002':
+    eeg = eeg.iloc[:-25000] # time reset issue and unimportant segment at end to cut
 true_eeg_time = eeg.index.values
 nominal_fs = 500.0
 empiric_fs = len(true_eeg_time) / (true_eeg_time[-1] - true_eeg_time[0])
@@ -106,12 +112,6 @@ eeg_time = slope * np.arange(len(true_eeg_time)) + intercept
 eeg = eeg.values[:, :len(channel_names)]
 eeg *= 1e-6
 eeg_raw = eeg # Volts
-
-def ch_name_to_idx(name):
-    if isinstance(name, (str,)):
-        return channel_names.index(name) 
-    elif isinstance(name, (list, np.ndarray)):
-        return [ch_name_to_idx(n) for n in name]
 
 ## Format into MNE
 ch_types = [{'ssep':'stim', 'gripswitch':'stim', 'ecg':'ecg'}.get(c, 'eeg') for c in channel_names]
@@ -300,6 +300,26 @@ if not is_us_session:
         else:
             return np.argmin(np.abs(t - cumulative_prop_time))
 
+elif is_us_session:
+    def cprop_t2i(t):
+        return 0
+    cumulative_prop = np.array([0])
+    cumulative_prop_time = np.array([0])
+
+
+
+def ch_name_to_idx(name):
+    all_channel_names = eeg.info['ch_names']
+    bad_channel_names = eeg.info['bads']
+    good_channel_names = [ch for ch in all_channel_names if ch not in bad_channel_names]
+    if isinstance(name, (str,)):
+        if name in good_channel_names:
+            return good_channel_names.index(name) 
+        else:
+            return None
+    elif isinstance(name, (list, np.ndarray)):
+        return [ch_name_to_idx(n) for n in name if ch_name_to_idx(n) is not None]
+
 # ---- Analyses
 
 ## Summary with spectrogram
@@ -351,7 +371,10 @@ sp = nanpow2db(sp)
 #spect2, sp_t2, sp_f2 = mts_mne(eeg_spect, window_size=s_win_size) # works but slower and worse
 #sp2 = np.nanmedian(spect2, axis=0)
 def spect_t2i(t):
-    return np.argmin(np.abs(sp_t - t))
+    if isinstance(t, (list, np.ndarray)):
+        return np.array([spect_t2i(x) for x in t])
+    else:
+        return np.argmin(np.abs(t - sp_t))
 
 # compute connectivity measures - experimental
 '''
@@ -752,11 +775,37 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
 fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
 
 
-## --- sandbox
-'''
-fig, axs = pl.subplots(1, len(expanded_chirps), figsize=(15,5))
-for (l, c), ax in zip(expanded_chirps, axs):
-    mag = np.mean(c, axis=(1,2))
-    mne.viz.plot_topomap(mag, eeg_chirp.info, axes=ax, show=False)
-'''
+## --- sandbox for tus only
+mtxt = markers.text.str.strip()
+t0s = markers[mtxt=='ssep start'].t.values
+t0a = t0s[0]
+t0b = t0s[-1]
+t1s = markers[mtxt=='chirp complete'].t.values
+t1a = t1s[0]
+t1b = t1s[-1]
+
+i0a, i1a = spect_t2i([t0a, t1a])
+i0b, i1b = spect_t2i([t0b, t1b])
+
+ob_frontal = ['Cz','FCz','Fz','C3','C4']
+ob_posterior = ['Oz','M1','M2','P3','P4']
+ch_frontal = ch_name_to_idx(ob_frontal)
+ch_posterior = ch_name_to_idx(ob_posterior)
+
+xf = np.nanmean(spect[ch_frontal], axis=0)
+xp = np.nanmean(spect[ch_posterior], axis=0)
+
+xf = np.nanmean(xf[alpha], axis=0)
+xp = np.nanmean(xp[alpha], axis=0)
+
+xf_a = np.nanmean(xf[i0a:i1a])
+xp_a = np.nanmean(xp[i0a:i1a])
+xf_b = np.nanmean(xf[i0b:i1b])
+xp_b = np.nanmean(xp[i0b:i1b])
+
+fig, ax = pl.subplots()
+ax.plot([0,1], [xf_a, xf_b])
+ax.plot([0,1], [xp_a, xp_b])
+
+fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
 ##

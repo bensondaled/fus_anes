@@ -11,7 +11,7 @@ from cycler import cycler
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
-prop_quantity = 'cprop' # ce / cprop / cce
+prop_quantity = 'ce' # ce / cprop / cce
 lor_fraction_thresh = 0.5
 
 order = [
@@ -116,18 +116,37 @@ colors = [
     "#CC79A7",  # pink
     "#F0E442",  # yellow
 ]
-ax.set_prop_cycle(cycler(color=colors))
 
-for s0, s1 in order:
+idx = 0
+for (s0, s1) in order:
     if s0 == s1: continue
     if s0.endswith('b001'): continue
+
+    date0 = s0[:s0.index('_')]
+    date1 = s1[:s1.index('_')]
+    if date0 < date1:
+        m0 = '$1$'
+        m1 = '$2$'
+    else:
+        m0 = '$2$'
+        m1 = '$1$'
+
     l0 = lors[s0]
     l1 = lors[s1]
-    ax.plot([0,1], [l0, l1], marker='o',
-            label=s0[-4:])
+    
+    #l1 = l1/l0
+    #l0 = l0/l0
+
+    col = colors[idx]
+    ax.scatter([0], [l0], marker=m0, color=col)
+    ax.scatter([1], [l1], marker=m1, color=col)
+    ax.plot([0.05,0.95], [l0, l1],
+            label=s0[-4:],
+            color=col)
+    idx += 1
 
 ax.set_xticks([0,1])
-ax.set_xticklabels(['Unfocused', 'CMT'])
+ax.set_xticklabels(['Unfocused\n(sham)', 'Focused\n(active)'])
 pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentration', cprop='cumulative mg propofol')
 ax.set_ylabel(f'{pql[prop_quantity]} at loss-of-response')
 ax.legend()
@@ -137,8 +156,8 @@ main_quantity = 'ap_ratio' # ap_ratio, aa, pa, ta
 rise_only = True
 do_bin = True
 do_log = True
-norm_to = 'first' # first / last / none
-do_fit = False
+norm_to = 'none' # first / last / none
+do_fit = True
 show_lor = False 
 
 gs = GridSpec(1, len(order)*3,
