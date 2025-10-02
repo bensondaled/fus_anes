@@ -413,7 +413,7 @@ cut = pd.cut(dfs.drug, bins=8)
 gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
 mean0 = gb.eeg.mean()
 
-fig, ax = pl.subplots()
+fig, ax = pl.subplots(figsize=(7,7))
 for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
     use = mean0[cond]
     mean = use.groupby('drug', observed=False).mean()
@@ -423,13 +423,15 @@ for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
     yvals = mean.values
 
     # if you ran the previous section with no norms or logging, can do it on the agg instead
-    #yvals = 10*np.log10(yvals)
-    #yvals -= yvals[0]
+    yvals = 10*np.log10(yvals)
+    yvals -= yvals[0]
 
     ax.errorbar(xvals,
                 yvals,
                 yerr=err.values, 
                 capsize=5,
                 color=col)
-
+    
+ax.set_xlabel(f'{prop_quantity}')
+ax.set_ylabel('AP ratio')
 ##
