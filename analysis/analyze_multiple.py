@@ -154,11 +154,13 @@ ax.legend()
 ## anteriorization figure
 main_quantity = 'ap_ratio' # ap_ratio, aa, pa, ta
 rise_only = True
-do_bin = True
-do_log = True
+do_bin = False
+do_log = False
 norm_to = 'none' # first / last / none
-do_fit = True
+do_fit = False
 show_lor = False 
+
+agg = []
 
 gs = GridSpec(1, len(order)*3,
               right=0.99,
@@ -184,13 +186,13 @@ for idx, names in enumerate(order):
     for name,cond,col in zip(names, ['sham','active'], ['cadetblue', 'coral']): 
         ce, cce, cprop, spect, channels, sp_f, phase_info = ant[name]
 
-        # TEMP can consider only working on specific subsets of these data
+        # working on specific subsets of these data
         keep = np.arange(len(ce)) >= phase_info[0][0] # the true beginning of level-0
         ce = ce[keep]
         cce = cce[keep]
         cprop = cprop[keep]
         spect = spect[...,keep]
-        # END TEMP
+        #
 
         if prop_quantity == 'ce':
             _pq = ce
@@ -319,7 +321,6 @@ for idx, names in enumerate(order):
             else:
                 e_apr_ = None
 
-            # TEMP
             if do_log:
                 apr_ = 10*np.log10(apr_)
                 norm_fxn = np.subtract
@@ -390,5 +391,45 @@ for idx, names in enumerate(order):
                         fontsize=9,
                         color=col,
                         transform=blend(ax.transData, ax.transAxes))
+
+            agg.append([name, cond, c_, apr_])
+
+## aggregate over subjects
+
+dfs = []
+for name, cond, c, apr in agg:
+    df = pd.DataFrame(np.array([c, apr]).T, columns=['drug','eeg'])
+    df['name'] = name
+    df['cond'] = cond
+
+    df['subj'] = df['name'].str.slice(-4, None)
+    dfs.append(df)
+dfs = pd.concat(dfs)
+
+to_drop = dfs.name.str.contains('b001') | dfs.name.str.contains('b006')
+dfs = dfs[~to_drop]
+
+cut = pd.cut(dfs.drug, bins=8)
+gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
+mean0 = gb.eeg.mean()
+
+fig, ax = pl.subplots()
+for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
+    use = mean0[cond]
+    mean = use.groupby('drug', observed=False).mean()
+    err = use.groupby('drug', observed=False).sem()
+    xvals = np.array([np.mean([i.left, i.right]) for i in mean.index.values])
+    
+    yvals = mean.values
+
+    # if you ran the previous section with no norms or logging, can do it on the agg instead
+    #yvals = 10*np.log10(yvals)
+    #yvals -= yvals[0]
+
+    ax.errorbar(xvals,
+                yvals,
+                yerr=err.values, 
+                capsize=5,
+                color=col)
 
 ##
