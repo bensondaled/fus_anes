@@ -11,7 +11,7 @@ from cycler import cycler
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
-prop_quantity = 'ce' # ce / cprop / cce
+prop_quantity = 'cprop' # ce / cprop / cce
 lor_fraction_thresh = 0.5
 
 order = [
@@ -30,7 +30,7 @@ order = [
         '2025-09-19_07-52-47_subject-b008',],
         
         [
-        '2025-09-12_merge_subject-b006',
+        '2025-10-03_07-38-36_subject-b006',
         '2025-09-12_merge_subject-b006',],
         
         [
@@ -153,7 +153,7 @@ ax.legend()
 
 ## anteriorization figure
 main_quantity = 'ap_ratio' # ap_ratio, aa, pa, ta
-rise_only = True
+rise_only = False
 do_bin = False
 do_log = False
 norm_to = 'none' # first / last / none
@@ -279,7 +279,7 @@ for idx, names in enumerate(order):
                                 3.25, #3.0 level
                                 ]
                     elif bins_category == 2:
-                        bins = 20
+                        bins = 12
                 elif direction == -1:
                     if bins_category == 0:
                         bins = [-0.01,
@@ -296,7 +296,7 @@ for idx, names in enumerate(order):
                                 2.7, #2.4 level
                                 ]
                     elif bins_category == 2:
-                        bins = 20
+                        bins = 12
                 to_plot['bin'] = pd.cut(to_plot.iloc[:,0], bins=bins)
                 to_plot_mean = to_plot.groupby('bin', as_index=False, observed=False).mean()
                 to_plot_mean = to_plot_mean.values[:,1:].astype(float)
@@ -406,10 +406,10 @@ for name, cond, c, apr in agg:
     dfs.append(df)
 dfs = pd.concat(dfs)
 
-to_drop = dfs.name.str.contains('b001') | dfs.name.str.contains('b006')
+to_drop = dfs.name.str.contains('b001') #| dfs.name.str.contains('b006')
 dfs = dfs[~to_drop]
 
-cut = pd.cut(dfs.drug, bins=8)
+cut = pd.cut(dfs.drug, bins=10)
 gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
 mean0 = gb.eeg.mean()
 
@@ -423,8 +423,8 @@ for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
     yvals = mean.values
 
     # if you ran the previous section with no norms or logging, can do it on the agg instead
-    yvals = 10*np.log10(yvals)
-    yvals -= yvals[0]
+    #yvals = 10*np.log10(yvals)
+    #yvals -= yvals[0]
 
     ax.errorbar(xvals,
                 yvals,
