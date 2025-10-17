@@ -39,6 +39,10 @@ sessions = [
     '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5', # 10
     '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 11
     
+    '/Users/bdd/data/fus_anes/2025-10-08_07-45-31_subject-b007.h5', # 12
+    
+    '/Users/bdd/data/fus_anes/2025-10-16_08-04-53_subject-b010.h5', # 13 # note this session needs extra cleaning attention for many reasons
+
     #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5', # u/s
@@ -48,14 +52,14 @@ sessions = [
     #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-16_07-48-02_subject-b002.h5', # u/s
-    '/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
     
     ]
 
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 9 # manual within-script selection
+    selection = 13 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -393,15 +397,18 @@ con = spectral_connectivity_epochs(
 '''
 
 # prep the chirp data
-eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
-chirp_ch_name = ['F3', 'F4'] 
+
+#eeg_chirp = eeg.copy().set_eeg_reference(['M1','M2'], projection=False)
+eeg_chirp = eeg.copy() # avg ref
+
+chirp_ch_name = ['F3', 'F4', 'Fz', 'FCz'] 
 chirp_ch_idx = ch_name_to_idx(chirp_ch_name)
 
 chirp_onset_t = chirp[chirp.event=='c'].onset_ts.values
 level_id = t_to_phase_idx(chirp_onset_t)
 chirp_onset = t2i(chirp_onset_t)
 events = np.array([[int(idx), 0, lid] for idx, lid in zip(chirp_onset, level_id)])
-event_id = {f'{phase_levels[x]:0.1f}':x for x in np.unique(level_id)}
+event_id = {f'{phase_levels[x]:0.1f}':x for x in np.arange(len(phase_levels))}
 
 epochs = mne.Epochs(eeg_chirp,
                     events,
@@ -410,6 +417,7 @@ epochs = mne.Epochs(eeg_chirp,
                     baseline=(-0.2, 0),
                     detrend=1,
                     reject_by_annotation=True,
+                    on_missing='warn',
                     preload=True)
 epochs = epochs.pick('eeg')  # or just use all: comment this out
 
@@ -450,9 +458,8 @@ s_d = oddball[oddball.event.isin(['s','d'])].event.values.copy()
 level_id = t_to_phase_idx(ob_events_t)
 ob_onset = t2i(ob_events_t)
 
-n_levels = len(np.unique(level_id))
 oddballs = []
-for lev in np.unique(level_id):
+for lev in np.arange(len(phase_levels)):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
 
@@ -461,6 +468,10 @@ for lev in np.unique(level_id):
         np.column_stack((events_d, np.zeros_like(events_d), np.full_like(events_d, 2)))
     ]).astype(int)
     event_id = {'standard': 1, 'deviant': 2}
+
+    if len(events) == 0:
+        oddballs.append([phase_levels[lev], None, None])
+        continue
     
     epochs = mne.Epochs(eeg_ob,
                         events,
@@ -470,6 +481,7 @@ for lev in np.unique(level_id):
                         baseline=(-0.050, 0),
                         detrend=1,
                         reject_by_annotation=True,
+                        on_missing='warn',
                         preload=True)
     epochs = epochs.pick('eeg')
 
@@ -500,9 +512,8 @@ inferred_ssep_rate = 1/np.median(np.diff(onset_t))
 print(f'Inferred rate of {inferred_ssep_rate:0.2f} Hz - if far from 7, inspect.')
 
 level_id = t_to_phase_idx(onset_t)
-n_levels = len(np.unique(level_id))
 ssep_traces = []
-for lev in np.unique(level_id):
+for lev in np.arange(len(phase_levels)):
     onset = onset_idx[level_id == lev]
     events = np.column_stack((onset, np.zeros_like(onset), np.ones_like(onset))).astype(int)
 
@@ -513,6 +524,7 @@ for lev in np.unique(level_id):
                         tmax=0.080,
                         baseline=(-0.010, 0.00),
                         reject_by_annotation=True,
+                        on_missing='warn',
                         preload=True)
     evoked = epochs.average()
 
@@ -522,13 +534,14 @@ for lev in np.unique(level_id):
     trace = evoked.data[ch_idxs] * 1e6
     ssep_traces.append([phase_levels[lev], trace])
 
-# anteriorization analysis
+# aggregate analysis
 ce_for_spect = np.array([ce_vals[ce_t2i(t)] for t in sp_t])
 cprop_for_spect = np.array([cumulative_prop[cprop_t2i(t)] for t in sp_t])
 ds0 = f'{name}_ce'
 ds1 = f'{name}_spect'
 ds2 = f'{name}_cprop'
 ds3 = f'{name}_phases'
+ds4 = f'{name}_chirp'
 with h5py.File(processed_path, 'a') as h:
     if ds0 in h:
         del h[ds0]
@@ -538,6 +551,8 @@ with h5py.File(processed_path, 'a') as h:
         del h[ds2]
     if ds3 in h:
         del h[ds3]
+    if ds4 in h:
+        del h[ds4]
     ds = h.create_dataset(ds1, data=spect, compression='lzf')
     ds.attrs['channels'] = eeg_spect.ch_names
     ds.attrs['freq'] = sp_f
@@ -545,6 +560,9 @@ with h5py.File(processed_path, 'a') as h:
     h.create_dataset(ds0, data=ce_for_spect, compression='lzf')
     h.create_dataset(ds2, data=cprop_for_spect, compression='lzf')
     h.create_dataset(ds3, data=[[spect_t2i(ps) for ps in phase_starts], phase_starts, phase_levels], compression='lzf')
+
+    ds = h.create_dataset(ds4, data=[ec[1] for ec in expanded_chirps], compression='lzf')
+    ds.attrs['lev'] = [ec[0] for ec in expanded_chirps]
 
 ## display the summary
 
@@ -650,13 +668,10 @@ ax.text(0.9, 0.78, 'Delta', fontsize=10,
 chunk_dt = 30
 time_chunks = np.arange(0, total_secs+1, chunk_dt)
 response_traj = []
-max_lag = 1.0 # secs
+max_lag = 3.5 # secs
 sq_onset = squeeze[squeeze.event.str.endswith('mp3')].onset_ts.values - summary_start_time
 press_idx = detect_switch(np.abs(switch), switch_thresh[name])
 squeeze_times = np.array([eeg_time[i] for i in press_idx]) - summary_start_time
-#fig_s, ax_s = pl.subplots()
-#ax_s.vlines(sq_onset, 0, 1, color='k')
-#ax_s.vlines(squeeze_times, 0, 1, color='r')
 for t0 in time_chunks:
     t1 = t0 + chunk_dt
     sq_lev = sq_onset[(sq_onset>=t0) & (sq_onset<t1)]
@@ -672,6 +687,7 @@ for t0 in time_chunks:
     pct_resp = 100.0 * np.nanmean(~np.isnan(rts))
     response_traj.append([t0+chunk_dt//2, pct_resp])
 response_traj = np.array(response_traj)
+
 ax = fig.add_subplot(gs[1, :-1])
 rshow = response_traj.T[1]
 rfilled = pd.Series(rshow).ffill()
@@ -685,6 +701,11 @@ ax.grid(axis='y')
 #ax.vlines(sq_onset/60, 0, 100, color='red', lw=0.25)
 #ax.vlines(squeeze_times/60, 0, 100, color='green', lw=0.25)
 ax.sharex(ax_prop)
+
+fig_s, ax_s = pl.subplots()
+ax_s.vlines(sq_onset, 0, 1, color='k')
+ax_s.vlines(squeeze_times, 0, 1, color='r')
+ax_s.twinx().plot(response_traj.T[0], rfilled, color='purple')
 
 # save squeeze data for other analyses
 res = []
@@ -756,7 +777,8 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
     # oddball
     ax = fig.add_axes([x, y-h*1.0, w, h*0.8])
     #ax.plot(ob_i_fr - ob_i_ps, color='teal')
-    ax.plot(ob_i_fr, color='teal')
+    if ob_i_fr is not None:
+        ax.plot(ob_i_fr, color='teal')
     #ax.plot(ob_i_ps, color='crimson')
     if ob_ax: ax.sharey(ob_ax)
     ob_ax = ax
@@ -808,5 +830,5 @@ fig, ax = pl.subplots()
 ax.plot([0,1], [xf_a, xf_b])
 ax.plot([0,1], [xp_a, xp_b])
 
-fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
+#fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
 ##

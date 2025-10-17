@@ -37,11 +37,21 @@ order = [
         '2025-09-17_07-57-44_subject-b002',
         '2025-09-23_07-51-59_subject-b002',],
         
+        [
+        '2025-10-08_07-45-31_subject-b007',
+        '2025-10-08_07-45-31_subject-b007',
+        ],
+        
+        [
+        '2025-10-16_08-04-53_subject-b010',
+        '2025-10-16_08-04-53_subject-b010',
+        ],
         ]
 
 ##
 ant = {}
 sq = {}
+chirp = {}
 with h5py.File(processed_path, 'r') as h:
     for name in np.ravel(order):
         ce = np.array(h[f'{name}_ce']).copy()
@@ -57,6 +67,9 @@ with h5py.File(processed_path, 'r') as h:
         sq_dat = np.array(h[f'{name}_squeeze'])
         ss = np.array(h[f'{name}_squeeze_starts'])
         sq[name] = sq_dat, ss
+        
+        chds = h[f'{name}_chirp']
+        chirp[name] = [chds.attrs['lev'], np.array(chds).copy()]
         
 ## squeeze and LOR stats
 lors = {}
@@ -115,6 +128,8 @@ colors = [
     "#D55E00",  # vermillion
     "#CC79A7",  # pink
     "#F0E442",  # yellow
+    "#E092B2",  #
+    "#A69F90",  # 
 ]
 
 idx = 0
@@ -434,4 +449,27 @@ for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
     
 ax.set_xlabel(f'{prop_quantity}')
 ax.set_ylabel('AP ratio')
+
+## sandbox: chirp
+
+fig, axs = pl.subplots(3,4)
+axs = axs.ravel()
+
+idx = 0
+for name, (lev, dat) in chirp.items():
+    proc = np.nanmean(dat[:, [0,2], : ,:], axis=1)
+    summ = np.nansum(proc, axis=(1,2))
+    
+    # ascending only
+    keep = np.arange(len(lev)) <= np.argmax(lev)
+    lev = lev[keep]
+    summ = summ[keep]
+    
+    lor = lors[name]
+    
+    ax = axs[idx]
+    ax.plot(lev, summ)
+    ax.axvline(lor, color='k')
+    ax.set_title(name, fontsize=8)
+    idx += 1
 ##
