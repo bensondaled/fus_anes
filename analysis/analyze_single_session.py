@@ -52,14 +52,14 @@ sessions = [
     #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-16_07-48-02_subject-b002.h5', # u/s
-    #'/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
+    '/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
     
     ]
 
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 13 # manual within-script selection
+    selection = 14 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -139,6 +139,14 @@ if not already_clean:
     eeg_clean = eeg.copy()
     eeg_clean._data = np.nan_to_num(eeg_clean._data)
     eeg_clean.set_eeg_reference('average', projection=True) # project True so it doesn't lose original data
+    
+    ann_times = markers.t.values - eeg_time[0]
+    ann_names = markers.text.str.strip().values
+    annot = mne.Annotations(onset=ann_times,
+                            duration=[0.001]*len(ann_times),
+                            description=ann_names)
+    eeg_clean.set_annotations(annot)
+
     eeg_clean.plot(block=True, duration=30, use_opengl=True,
                    highpass=1.0, lowpass=40)
 
@@ -517,6 +525,10 @@ for lev in np.arange(len(phase_levels)):
     onset = onset_idx[level_id == lev]
     events = np.column_stack((onset, np.zeros_like(onset), np.ones_like(onset))).astype(int)
 
+    if len(events) == 0:
+        ssep_traces.append([phase_levels[lev], None])
+        continue
+
     epochs = mne.Epochs(eeg_ssep,
                         events,
                         event_id=1,
@@ -702,10 +714,10 @@ ax.grid(axis='y')
 #ax.vlines(squeeze_times/60, 0, 100, color='green', lw=0.25)
 ax.sharex(ax_prop)
 
-fig_s, ax_s = pl.subplots()
-ax_s.vlines(sq_onset, 0, 1, color='k')
-ax_s.vlines(squeeze_times, 0, 1, color='r')
-ax_s.twinx().plot(response_traj.T[0], rfilled, color='purple')
+#fig_s, ax_s = pl.subplots()
+#ax_s.vlines(sq_onset, 0, 1, color='k')
+#ax_s.vlines(squeeze_times, 0, 1, color='r')
+#ax_s.twinx().plot(response_traj.T[0], rfilled, color='purple')
 
 # save squeeze data for other analyses
 res = []
@@ -788,7 +800,8 @@ for (c_plev, chirp_i), (o_plev, ob_i_fr, ob_i_ps), (s_plev, ssep_trace) in zip(c
 
     # ssep
     ax = fig.add_axes([x, y-h*2.0, w, h*0.8])
-    ax.plot(ssep_trace.T, color='crimson')
+    if ssep_trace is not None:
+        ax.plot(ssep_trace.T, color='crimson')
     if ssep_ax: ax.sharey(ssep_ax)
     ssep_ax = ax
     ax.set_yticklabels([])
@@ -800,26 +813,26 @@ fig.savefig(f'/Users/bdd/Desktop/summary_{name}.jpg', dpi=350)
 
 ## --- sandbox for tus only
 mtxt = markers.text.str.strip()
-t0s = markers[mtxt=='ssep start'].t.values
+t0s = markers[mtxt=='oddball start'].t.values
 t0a = t0s[0]
 t0b = t0s[-1]
-t1s = markers[mtxt=='chirp complete'].t.values
+t1s = markers[mtxt=='oddball complete'].t.values
 t1a = t1s[0]
 t1b = t1s[-1]
 
 i0a, i1a = spect_t2i([t0a, t1a])
 i0b, i1b = spect_t2i([t0b, t1b])
 
-ob_frontal = ['Cz','FCz','Fz','C3','C4']
-ob_posterior = ['Oz','M1','M2','P3','P4']
+ob_frontal = ['F3','Fz','F4']
+ob_posterior = ['Oz','P3','P4']
 ch_frontal = ch_name_to_idx(ob_frontal)
 ch_posterior = ch_name_to_idx(ob_posterior)
 
 xf = np.nanmean(spect[ch_frontal], axis=0)
 xp = np.nanmean(spect[ch_posterior], axis=0)
 
-xf = np.nanmean(xf[alpha], axis=0)
-xp = np.nanmean(xp[alpha], axis=0)
+xf = np.nanmean(xf[delta], axis=0)
+xp = np.nanmean(xp[delta], axis=0)
 
 xf_a = np.nanmean(xf[i0a:i1a])
 xp_a = np.nanmean(xp[i0a:i1a])
@@ -828,7 +841,7 @@ xp_b = np.nanmean(xp[i0b:i1b])
 
 fig, ax = pl.subplots()
 ax.plot([0,1], [xf_a, xf_b])
-ax.plot([0,1], [xp_a, xp_b])
+#ax.plot([0,1], [xp_a, xp_b])
 
-#fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
+fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
 ##
