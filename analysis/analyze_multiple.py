@@ -16,8 +16,8 @@ lor_fraction_thresh = 0.5
 
 order = [
 
-        ['2025-07-23_12-05-45_subject-b001',
-        '2025-08-05_11-52-41_subject-b001',],
+        #['2025-07-23_12-05-45_subject-b001',
+        #'2025-08-05_11-52-41_subject-b001',],
 
         ['2025-08-29_08-54-34_subject-b003',
         '2025-07-25_08-38-29_subject-b003',],
@@ -39,13 +39,13 @@ order = [
         
         [
         '2025-10-08_07-45-31_subject-b007',
-        '2025-10-08_07-45-31_subject-b007',
+        '2025-10-22_07-51-53_subject-b007',
         ],
         
-        [
-        '2025-10-16_08-04-53_subject-b010',
-        '2025-10-16_08-04-53_subject-b010',
-        ],
+        #[
+        #'2025-10-16_08-04-53_subject-b010',
+        #'2025-10-16_08-04-53_subject-b010',
+        #],
         ]
 
 ##
@@ -410,45 +410,109 @@ for idx, names in enumerate(order):
             agg.append([name, cond, c_, apr_])
 
 ## aggregate over subjects
+shufs = []
 
+for _ in range(1):
+
+    dfs = []
+    for name, cond, c, apr in agg:
+        df = pd.DataFrame(np.array([c, apr]).T, columns=['drug','eeg'])
+        df['name'] = name
+        df['cond'] = cond
+        #df['cond'] = np.random.choice(['sham','active'])
+
+        df['subj'] = df['name'].str.slice(-4, None)
+        dfs.append(df)
+    dfs = pd.concat(dfs)
+
+    to_drop = dfs.name.str.contains('b001')
+    dfs = dfs[~to_drop]
+
+    #dfs = dfs[dfs.drug>2.5] # TODO NOTE
+
+    cut = pd.cut(dfs.drug, bins=10)
+    gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
+    mean0 = gb.eeg.mean()
+
+
+    #fig, ax = pl.subplots(figsize=(7,7))
+    shuf = []
+    for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
+        use = mean0[cond]
+        mean = use.groupby('drug', observed=False).mean()
+        err = use.groupby('drug', observed=False).sem()
+        xvals = np.array([np.mean([i.left, i.right]) for i in mean.index.values])
+        
+        yvals = mean.values
+
+        # if you ran the previous section with no norms or logging, can do it on the agg instead
+        #yvals = 10*np.log10(yvals)
+        #yvals -= yvals[0]
+
+#        ax.errorbar(xvals,
+#                    yvals,
+#                    yerr=err.values, 
+#                    capsize=5,
+#                    color=col)
+#
+        shuf.append(yvals)
+    shufs.append(shuf)
+        
+    ax.set_xlabel(f'{prop_quantity}')
+    ax.set_ylabel('AP ratio')
+
+
+# other way
+cm = mean0['active'].groupby('subj').mean()
+unfoc = mean0['sham'].groupby('subj').mean()
+assert np.all(cm.index == unfoc.index)
+active = cm.values
+sham = unfoc.values
+#active /= sham
+#sham /= sham
+fig, ax = pl.subplots()
+ax.plot([0,1], [sham, active])
+
+
+# shuf
+x = np.array(shufs)
+fig, ax = pl.subplots()
+dif = np.diff(x, axis=1).squeeze()
+lo, hi = np.percentile(dif, [2.5, 97.5], axis=0)
+ax.fill_between(xvals, lo, hi, lw=0, alpha=0.5)
+
+
+
+
+## next round same goal
 dfs = []
 for name, cond, c, apr in agg:
     df = pd.DataFrame(np.array([c, apr]).T, columns=['drug','eeg'])
     df['name'] = name
     df['cond'] = cond
+    #df['cond'] = np.random.choice(['sham','active'])
 
     df['subj'] = df['name'].str.slice(-4, None)
     dfs.append(df)
 dfs = pd.concat(dfs)
 
-to_drop = dfs.name.str.contains('b001') #| dfs.name.str.contains('b006')
-dfs = dfs[~to_drop]
+fig, ax = pl.subplots()
+all_vals = []
+for subj in dfs.subj.unique():
+    d = dfs[dfs.subj == subj]
+    vals = []
+    for cond in ['sham','active']:
+        dx = d[d.cond == cond]
+        dx = dx[dx.drug >= 2.5]
+        p = dx.eeg.mean()
+        vals.append(p)
+    ax.plot(vals)
+    all_vals.append(vals)
+all_vals = np.array(all_vals)
 
-cut = pd.cut(dfs.drug, bins=10)
-gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
-mean0 = gb.eeg.mean()
-
-fig, ax = pl.subplots(figsize=(7,7))
-for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
-    use = mean0[cond]
-    mean = use.groupby('drug', observed=False).mean()
-    err = use.groupby('drug', observed=False).sem()
-    xvals = np.array([np.mean([i.left, i.right]) for i in mean.index.values])
-    
-    yvals = mean.values
-
-    # if you ran the previous section with no norms or logging, can do it on the agg instead
-    #yvals = 10*np.log10(yvals)
-    #yvals -= yvals[0]
-
-    ax.errorbar(xvals,
-                yvals,
-                yerr=err.values, 
-                capsize=5,
-                color=col)
-    
-ax.set_xlabel(f'{prop_quantity}')
-ax.set_ylabel('AP ratio')
+from scipy.stats import mannwhitneyu
+res = mannwhitneyu(*all_vals.T)
+print(res.pvalue)
 
 ## sandbox: chirp
 

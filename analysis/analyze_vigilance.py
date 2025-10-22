@@ -13,7 +13,8 @@ meta = {}
 #data_file = '/Users/bdd/data/fus_anes/2025-09-05_vigilance_b008.txt'
 #data_file = '/Users/bdd/data/fus_anes/2025-09-19_vigilance_b008.txt'
 #data_file = '/Users/bdd/data/fus_anes/2025-09-17_vigilance_b002.txt'
-data_file = '/Users/bdd/data/fus_anes/2025-09-23_vigilance_b002.txt'
+#data_file = '/Users/bdd/data/fus_anes/2025-09-23_vigilance_b002.txt'
+data_file = '/Users/bdd/data/fus_anes/2025-10-22_vigilance_b007.txt'
 
 meta[data_file] = {}
 

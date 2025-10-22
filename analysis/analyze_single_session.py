@@ -40,8 +40,9 @@ sessions = [
     '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 11
     
     '/Users/bdd/data/fus_anes/2025-10-08_07-45-31_subject-b007.h5', # 12
+    '/Users/bdd/data/fus_anes/2025-10-22_07-51-53_subject-b007.h5', # 13
     
-    '/Users/bdd/data/fus_anes/2025-10-16_08-04-53_subject-b010.h5', # 13 # note this session needs extra cleaning attention for many reasons
+    '/Users/bdd/data/fus_anes/2025-10-16_08-04-53_subject-b010.h5', # 14 # note this session needs extra cleaning attention for many reasons
 
     #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
@@ -52,14 +53,14 @@ sessions = [
     #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-16_07-48-02_subject-b002.h5', # u/s
-    '/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
     
     ]
 
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 14 # manual within-script selection
+    selection = 13 # manual within-script selection
 
 session_path = sessions[selection]
 
