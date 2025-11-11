@@ -1,5 +1,4 @@
 import numpy as np
-
 from fus_anes.tci.tci import TCI
 
 class TCI_Propofol(TCI):
