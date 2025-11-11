@@ -6,12 +6,14 @@ to_merge = [
             #'/Users/bdd/Desktop/drive-download-20250730T185854Z-1-001/2025-07-30_07-57-13_subject-b004.h5',
             #'/Users/bdd/Desktop/drive-download-20250730T185854Z-1-001/2025-07-30_09-52-22_subject-b004.h5',
 
-            '/Users/bdd/Desktop/drive-download-20250912T180252Z-1-001/2025-09-12_07-43-45_subject-b006.h5',
-            '/Users/bdd/Desktop/drive-download-20250912T180252Z-1-001/2025-09-12_09-19-59_subject-b006.h5',
+            #'/Users/bdd/Desktop/drive-download-20250912T180252Z-1-001/2025-09-12_07-43-45_subject-b006.h5',
+            #'/Users/bdd/Desktop/drive-download-20250912T180252Z-1-001/2025-09-12_09-19-59_subject-b006.h5',
+            '/Users/bdd/Desktop/drive-download-20251105T192003Z-1-001/2025-11-05_07-59-48_subject-b010.h5',
+            '/Users/bdd/Desktop/drive-download-20251105T192003Z-1-001/2025-11-05_08-21-06_subject-b010.h5',
         ]
 to_merge = sorted(to_merge)
 
-out_name = '2025-09-12_merge_subject-b006'
+out_name = '2025-11-05_merge_subject-b010'
 out_path = f'/Users/bdd/Desktop/{out_name}.h5'
 
 ## merge

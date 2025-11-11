@@ -7,6 +7,7 @@ from util import fit_sigmoid2, make_sq_probability
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
 from cycler import cycler
+from scipy.stats import wilcoxon
 
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
@@ -27,7 +28,8 @@ order = [
         
         [
         '2025-09-05_08-10-33_subject-b008',
-        '2025-09-19_07-52-47_subject-b008',],
+        '2025-09-19_07-52-47_subject-b008',
+        ],
         
         [
         '2025-10-03_07-38-36_subject-b006',
@@ -42,9 +44,20 @@ order = [
         '2025-10-22_07-51-53_subject-b007',
         ],
         
+        [
+        '2025-10-16_08-04-53_subject-b010',
+        '2025-11-05_merge_subject-b010',
+        ],
+        #
         #[
-        #'2025-10-16_08-04-53_subject-b010',
-        #'2025-10-16_08-04-53_subject-b010',
+        #'2025-10-29_07-49-12_subject-b013',
+        #'2025-10-29_07-49-12_subject-b013',
+        #],
+        
+        #[
+        #'2025-09-05_08-10-33_subject-b008',
+        #'2025-09-19_07-52-47_subject-b008',
+        #'2025-10-24_07-54-48_subject-b008',
         #],
         ]
 
@@ -133,6 +146,7 @@ colors = [
 ]
 
 idx = 0
+summ = []
 for (s0, s1) in order:
     if s0 == s1: continue
     if s0.endswith('b001'): continue
@@ -148,6 +162,8 @@ for (s0, s1) in order:
 
     l0 = lors[s0]
     l1 = lors[s1]
+
+    summ.append([l0,l1])
     
     #l1 = l1/l0
     #l0 = l0/l0
@@ -166,10 +182,13 @@ pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentra
 ax.set_ylabel(f'{pql[prop_quantity]} at loss-of-response')
 ax.legend()
 
+summ = np.array(summ)
+wilcoxon(*summ.T)
+
 ## anteriorization figure
 main_quantity = 'ap_ratio' # ap_ratio, aa, pa, ta
-rise_only = False
-do_bin = False
+rise_only = True
+do_bin = True
 do_log = False
 norm_to = 'none' # first / last / none
 do_fit = False
@@ -430,14 +449,19 @@ for _ in range(1):
 
     #dfs = dfs[dfs.drug>2.5] # TODO NOTE
 
-    cut = pd.cut(dfs.drug, bins=10)
+    cut = pd.cut(dfs.drug, bins=7)
     gb = dfs.groupby(['cond', cut, 'subj'], observed=False)
     mean0 = gb.eeg.mean()
 
 
-    #fig, ax = pl.subplots(figsize=(7,7))
+    fig, ax = pl.subplots(figsize=(6,6), gridspec_kw=dict(left=0.2, bottom=0.2))
     shuf = []
     for cond, col in zip(['sham', 'active'], ['cadetblue', 'coral']):
+        
+        # TEMP
+        #if cond == 'sham': continue
+        #col = 'slateblue'
+
         use = mean0[cond]
         mean = use.groupby('drug', observed=False).mean()
         err = use.groupby('drug', observed=False).sem()
@@ -448,18 +472,29 @@ for _ in range(1):
         # if you ran the previous section with no norms or logging, can do it on the agg instead
         #yvals = 10*np.log10(yvals)
         #yvals -= yvals[0]
+                
+        ax.errorbar(xvals,
+                    yvals,
+                    lw=0,
+                    elinewidth=1,
+                    markersize=10,
+                    marker='o',
+                    yerr=err.values, 
+                    capsize=5,
+                    color=col)
+        
+        xv, yv, (A,y0,ec50,B) = fit_sigmoid2(xvals, yvals, return_params=True)
+        ax.plot(xv, yv, color=col, lw=1,
+            label=f'{cond}\nA={A:0.1f}\ny0={y0:0.1f}\nx0={ec50:0.1f}',)
 
-#        ax.errorbar(xvals,
-#                    yvals,
-#                    yerr=err.values, 
-#                    capsize=5,
-#                    color=col)
-#
         shuf.append(yvals)
     shufs.append(shuf)
         
-    ax.set_xlabel(f'{prop_quantity}')
-    ax.set_ylabel('AP ratio')
+    ax.set_xlabel(f'{prop_quantity}', fontsize=25, labelpad=15)
+    ax.set_ylabel('AP ratio', fontsize=25, labelpad=15)
+    #ax.legend()
+
+    ax.tick_params(labelsize=25, length=10)
 
 
 # other way
@@ -503,15 +538,17 @@ for subj in dfs.subj.unique():
     vals = []
     for cond in ['sham','active']:
         dx = d[d.cond == cond]
-        dx = dx[dx.drug >= 2.5]
+        dx = dx[dx.drug >= 2.0]
         p = dx.eeg.mean()
         vals.append(p)
-    ax.plot(vals)
+    ax.plot(vals, label=subj)
     all_vals.append(vals)
 all_vals = np.array(all_vals)
+ax.legend()
 
-from scipy.stats import mannwhitneyu
-res = mannwhitneyu(*all_vals.T)
+from scipy.stats import wilcoxon, ttest_rel, mannwhitneyu, ttest_ind
+test = ttest_rel
+res = test(*all_vals.T)
 print(res.pvalue)
 
 ## sandbox: chirp

@@ -32,17 +32,21 @@ sessions = [
 
     '/Users/bdd/data/fus_anes/2025-09-05_08-10-33_subject-b008.h5', # 6,
     '/Users/bdd/data/fus_anes/2025-09-19_07-52-47_subject-b008.h5', # 7,
+    '/Users/bdd/data/fus_anes/2025-10-24_07-54-48_subject-b008.h5', # 8,
 
-    '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5',    # 8,
-    '/Users/bdd/data/fus_anes/2025-10-03_07-38-36_subject-b006.h5', # 9,
+    '/Users/bdd/data/fus_anes/2025-09-12_merge_subject-b006.h5',    # 9,
+    '/Users/bdd/data/fus_anes/2025-10-03_07-38-36_subject-b006.h5', # 10,
 
-    '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5', # 10
-    '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 11
+    '/Users/bdd/data/fus_anes/2025-09-17_07-57-44_subject-b002.h5', # 11
+    '/Users/bdd/data/fus_anes/2025-09-23_07-51-59_subject-b002.h5', # 12
     
-    '/Users/bdd/data/fus_anes/2025-10-08_07-45-31_subject-b007.h5', # 12
-    '/Users/bdd/data/fus_anes/2025-10-22_07-51-53_subject-b007.h5', # 13
+    '/Users/bdd/data/fus_anes/2025-10-08_07-45-31_subject-b007.h5', # 13
+    '/Users/bdd/data/fus_anes/2025-10-22_07-51-53_subject-b007.h5', # 14
     
-    '/Users/bdd/data/fus_anes/2025-10-16_08-04-53_subject-b010.h5', # 14 # note this session needs extra cleaning attention for many reasons
+    '/Users/bdd/data/fus_anes/2025-10-16_08-04-53_subject-b010.h5', # 15 # note this session needs extra cleaning attention for many reasons
+    '/Users/bdd/data/fus_anes/2025-11-05_merge_subject-b010.h5', # 16
+    
+    '/Users/bdd/data/fus_anes/2025-10-29_07-49-12_subject-b013.h5', # 17
 
     #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
@@ -60,7 +64,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 13 # manual within-script selection
+    selection = 10 # manual within-script selection
 
 session_path = sessions[selection]
 
@@ -252,6 +256,9 @@ if not is_us_session:
     sec = starttime
     pidx = 0
     lev = []
+    lev_cp = []
+    rates = []
+    rate = 0
     while sec < endtime:
         while pidx<len(pump) and sec >= pump.index.values[pidx]:
             rate = pump.iloc[pidx].rate # ml/min
@@ -261,14 +268,22 @@ if not is_us_session:
             pidx += 1
             sec += 1
             lev.append(t.level)
+            lev_cp.append(t.cp)
+            rates.append(rate)
         t.wait(1)
         sec += 1
         lev.append(t.level)
+        lev_cp.append(t.cp)
+        rates.append(rate)
     for _ in range(60*5):
         t.wait(1)
         lev.append(t.level)
+        lev_cp.append(t.cp)
+        rates.append(rate)
 
     ce_vals = np.array(lev)
+    cp_vals = np.array(lev_cp)
+    rates = np.array(rates)
     ce_time = np.arange(len(lev)) + starttime
 
 elif is_us_session:
@@ -350,7 +365,7 @@ s_win_size = 20.0 # secs
 n_topo = 16
 
 eeg_spect = eeg.copy().pick('eeg')
-#eeg_spect.set_eeg_reference(['Cz'])
+#eeg_spect.set_eeg_reference(['FCz'])
 eeg_spect = eeg_spect.drop_channels(eeg.info['bads'])
 eeg_spect = eeg_spect.resample(100)
 
@@ -369,6 +384,7 @@ mask = mask[:, None]
 
 # compute spect
 in_data = eeg_spect._data.T * 1e6 * mask
+#in_data = in_data[:,[0,1,2]]# TEMP TODO FRONTAL
 spect, sp_t, sp_f = mts(in_data,
                         window_size=s_win_size,
                         window_step=s_win_size,
@@ -468,6 +484,7 @@ level_id = t_to_phase_idx(ob_events_t)
 ob_onset = t2i(ob_events_t)
 
 oddballs = []
+#fig, axs = pl.subplots(3,4,sharex=True, sharey=True); axs=axs.ravel()# TEMP
 for lev in np.arange(len(phase_levels)):
     events_s = ob_onset[(level_id == lev) & (s_d == 's')]
     events_d = ob_onset[(level_id == lev) & (s_d == 'd')]
@@ -485,9 +502,9 @@ for lev in np.arange(len(phase_levels)):
     epochs = mne.Epochs(eeg_ob,
                         events,
                         event_id=event_id,
-                        tmin=-0.100,
-                        tmax=0.250,
-                        baseline=(-0.050, 0),
+                        tmin=-0.200,
+                        tmax=0.500,
+                        baseline=(-0.200, 0),
                         detrend=1,
                         reject_by_annotation=True,
                         on_missing='warn',
@@ -498,6 +515,10 @@ for lev in np.arange(len(phase_levels)):
     mean_deviant = epochs['deviant'].average()
 
     evoked = mne.combine_evoked([mean_standard], weights=[1,])
+    
+    #evoked.plot(axes=axs[lev]) # TEMP
+    #axs[lev].set_title(f'Prop={phase_levels[lev]}') # TEMP
+
     sig_frontal = evoked.data[ch_frontal].mean(axis=0) * 1e6
     sig_posterior = evoked.data[ch_posterior].mean(axis=0) * 1e6
     oddballs.append([phase_levels[lev], sig_frontal, sig_posterior])
@@ -845,4 +866,16 @@ ax.plot([0,1], [xf_a, xf_b])
 #ax.plot([0,1], [xp_a, xp_b])
 
 fig.savefig(f'/Users/bdd/Desktop/x-{name}.pdf')
+
+## total temp sandbox
+fig, ax = pl.subplots()
+sts = ssep_traces[1:5]
+cols = pl.cm.Blues(np.linspace(0.25, 1.0, len(sts)))
+for idx, (lev, tr) in enumerate(sts):
+    tr = tr[2] # electrode choice
+    t = 1000*np.linspace(0, 1, len(tr)) * 0.060 # ms
+    ax.plot(t, tr, color=cols[idx], label=f'{lev}')
+#ax.legend()
+ax.tick_params(labelsize=25)
+
 ##
