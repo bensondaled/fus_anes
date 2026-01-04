@@ -47,15 +47,16 @@ sessions = [
     '/Users/bdd/data/fus_anes/2025-11-05_merge_subject-b010.h5', # 16
     
     '/Users/bdd/data/fus_anes/2025-10-29_07-49-12_subject-b013.h5', # 17
+    '/Users/bdd/data/fus_anes/2025-11-12_07-45-42_subject-b013.h5', # 18
 
-    #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # u/s
+    #'/Users/bdd/data/fus_anes/2025-08-04_08-48-05_subject-b001.h5', # 19 u/s
     #'/Users/bdd/data/fus_anes/2025-07-24_08-38-41_subject-b003.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-08-28_08-50-10_subject-b003.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-07-29_08-07-02_subject-b004.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-08-11_07-54-24_subject-b004.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-11_07-42-12_subject-b006.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-04_08-06-39_subject-b008.h5', # u/s
-    #'/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
+    '/Users/bdd/data/fus_anes/2025-09-18_07-47-23_subject-b008.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-16_07-48-02_subject-b002.h5', # u/s
     #'/Users/bdd/data/fus_anes/2025-09-22_07-58-44_subject-b002.h5', # u/s
     
@@ -64,7 +65,7 @@ sessions = [
 try:
     selection = int(sys.argv[1]) # argument-based
 except:
-    selection = 10 # manual within-script selection
+    selection = 19 # manual within-script selection
 
 session_path = sessions[selection]
 

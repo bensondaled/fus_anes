@@ -12,7 +12,7 @@ from scipy.stats import wilcoxon
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
-prop_quantity = 'cprop' # ce / cprop / cce
+prop_quantity = 'ce' # ce / cprop / cce
 lor_fraction_thresh = 0.5
 
 order = [
@@ -40,19 +40,19 @@ order = [
         '2025-09-23_07-51-59_subject-b002',],
         
         [
-        '2025-10-08_07-45-31_subject-b007',
         '2025-10-22_07-51-53_subject-b007',
+        '2025-10-08_07-45-31_subject-b007',
         ],
         
         [
         '2025-10-16_08-04-53_subject-b010',
         '2025-11-05_merge_subject-b010',
         ],
-        #
-        #[
-        #'2025-10-29_07-49-12_subject-b013',
-        #'2025-10-29_07-49-12_subject-b013',
-        #],
+        
+        [
+        '2025-10-29_07-49-12_subject-b013',
+        '2025-11-12_07-45-42_subject-b013',
+        ],
         
         #[
         #'2025-09-05_08-10-33_subject-b008',
@@ -550,6 +550,12 @@ from scipy.stats import wilcoxon, ttest_rel, mannwhitneyu, ttest_ind
 test = ttest_rel
 res = test(*all_vals.T)
 print(res.pvalue)
+
+
+## mixed effects
+import statsmodels.formula.api as smf
+model = smf.mixedlm("eeg ~ cond * drug", dfs, groups=dfs["subj"])
+result = model.fit()
 
 ## sandbox: chirp
 
