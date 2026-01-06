@@ -20,10 +20,10 @@ from scipy.stats import wilcoxon, ttest_rel
 stattest = ttest_rel
 
 slp_types = ['S1','S2','S3']
-metrics = ['%TST']
+metrics = ['%TST','min']
 
 fig, axs = pl.subplots(len(metrics),len(slp_types),
-                       sharey=True,
+                       sharey='row',
                        sharex=True,
                        squeeze=False,
                        gridspec_kw=dict(hspace=0.7, wspace=0.7))
@@ -43,6 +43,7 @@ for slti,slt in enumerate(slp_types):
 
         ax.plot([0,1], [a, b])
         ax.set_title(f'{column}')#, p={pval:0.2f}')
+        ax.set_title(f'{column} p={pval:0.2f}')
         ax.set_xticks([0,1])
         ax.set_xticklabels(['Sham','CM'])
 
