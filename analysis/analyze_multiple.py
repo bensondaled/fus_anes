@@ -2,7 +2,7 @@
 import h5py
 import numpy as np
 import pandas as pd
-import os, warnings
+import os, warnings, json
 from util import fit_sigmoid2, make_sq_probability
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import blended_transform_factory as blend
@@ -12,7 +12,7 @@ from scipy.stats import wilcoxon
 warnings.simplefilter("ignore", category=RuntimeWarning)
 
 processed_path = '/Users/bdd/data/fus_anes/intermediate/processed.h5'
-prop_quantity = 'ce' # ce / cprop / cce
+prop_quantity = 'cprop' # ce / cprop / cce
 lor_fraction_thresh = 0.5
 
 order = [
@@ -60,6 +60,24 @@ order = [
         #'2025-10-24_07-54-48_subject-b008',
         #],
         ]
+
+## confirm always listed as sham->active
+from datetime import datetime, timedelta
+
+with open('/Users/bdd/data/fus_anes/grps.json', 'r') as f:
+    grps = json.loads(f.read())
+def parsedt(d, add=0):
+    subj = d.split('-')[-1]
+    d = d[:d.index('_')]
+    date_obj = datetime.strptime(d, "%Y-%m-%d")
+    next_day_obj = date_obj + timedelta(days=add)
+    new_date_str = next_day_obj.strftime("%Y-%m-%d")
+    return f'{new_date_str}_{subj}'
+grps = {parsedt(g):v for g,v in grps.items()}
+
+for subj in order:
+    assert grps[parsedt(subj[0], add=-1)] == 0
+    assert grps[parsedt(subj[1], add=-1)] == 1
 
 ##
 ant = {}
@@ -180,7 +198,7 @@ ax.set_xticks([0,1])
 ax.set_xticklabels(['Unfocused\n(sham)', 'Focused\n(active)'])
 pql = dict(ce='effect-site concentration', cce='cumulative effect-site concentration', cprop='cumulative mg propofol')
 ax.set_ylabel(f'{pql[prop_quantity]} at loss-of-response')
-ax.legend()
+#ax.legend()
 
 summ = np.array(summ)
 wilcoxon(*summ.T)
@@ -544,7 +562,12 @@ for subj in dfs.subj.unique():
     ax.plot(vals, label=subj)
     all_vals.append(vals)
 all_vals = np.array(all_vals)
-ax.legend()
+#ax.legend()
+
+ax.set_xticks([0,1])
+ax.set_xticklabels(['sham','active'])
+ax.set_title('one line per subject')
+ax.set_ylabel('ap ratio')
 
 from scipy.stats import wilcoxon, ttest_rel, mannwhitneyu, ttest_ind
 test = ttest_rel

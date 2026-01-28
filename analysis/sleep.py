@@ -18,6 +18,7 @@ grps = {parse(s):g for s,g in grps.items()}
 csvs = ['/Users/bdd/data/fus_anes/sleep/All_mean_durations_of_sleep_stages.csv',
         '/Users/bdd/data/fus_anes/sleep/All_number_of_episodes_by_sleep_stages.csv',
         '/Users/bdd/data/fus_anes/sleep/Summary_bandpower_by_state.csv',
+        '/Users/bdd/data/fus_anes/sleep/Summary_bandpower_by_state2.csv',
         ]
 
 for csv in csvs:
@@ -87,4 +88,40 @@ for ax in axs.ravel():
     ax.tick_params(length=5, width=0.5)
     for spine in ax.spines:
         ax.spines[spine].set_linewidth(0.5)
+
+## full traces stuff
+#csv = '/Users/bdd/data/fus_anes/sleep/All_PSDs_by_state_normalized.csv'
+csv = '/Users/bdd/data/fus_anes/sleep/All_PSDs_by_state_raw.csv'
+sleep_data = pd.read_csv(csv, index_col=0)
+sleep_data['cond'] = sleep_data['Session'].map(grps)
+sleep_data['subj'] = sleep_data['Session'].str.slice(0,4)
+data_cols = sleep_data.columns[:-5]
+
+grouped = sleep_data.groupby(['Wake/Sleep Category', "cond"])
+sleep_data[data_cols] = 10 * np.log10(sleep_data[data_cols])
+mean_df = grouped[data_cols].mean()
+sem_df  = grouped[data_cols].sem()
+
+x = np.array(data_cols).astype(float)
+groups = sleep_data["Wake/Sleep Category"].unique()
+fig, axs = pl.subplots(1, len(groups), sharex=True, sharey=True)
+for g,ax in zip(groups, axs):
+    for cond, condstr, color in zip([0, 1], ['sham', 'active'], ["tab:blue", "tab:orange"]):
+        mean_curve = mean_df.loc[(g, cond)].values
+        sem_curve  = sem_df.loc[(g, cond)].values
+        
+        ax.plot(x, mean_curve, label=f"{condstr}", color=color, lw=0.5)
+        ax.fill_between(
+            x,
+            mean_curve - sem_curve,
+            mean_curve + sem_curve,
+            color=color,
+            alpha=0.3,
+            lw=0,
+        )
+        ax.set_title(g)
+ax.legend()
+axs[0].set_ylabel('Power (dB)')
+axs[1].set_xlabel('Frequency (Hz)')
+    
 ##
