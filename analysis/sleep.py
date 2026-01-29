@@ -37,15 +37,18 @@ for csv in csvs:
 
         a = dat[0].values
         b = dat[1].values
+        ids = dat[0].index
 
         isnan = np.isnan(a) | np.isnan(b)
         pval = stattest(a[~isnan],b[~isnan]).pvalue
-
-        ax.plot([0,1], [a, b])
+        
+        for ai, bi, idi in zip(a,b,ids):
+            ax.plot([0,1], [ai, bi], label=idi)
         ax.set_title(f'{column}')#, p={pval:0.2f}')
         ax.set_title(f'{column} p={pval:0.2f}')
         ax.set_xticks([0,1])
         ax.set_xticklabels(['Sham','Active'])
+        ax.legend()
 
     fig.savefig(f'/Users/bdd/Desktop/{fname}.png')
     pl.close(fig)
@@ -92,10 +95,16 @@ for ax in axs.ravel():
 ## full traces stuff
 #csv = '/Users/bdd/data/fus_anes/sleep/All_PSDs_by_state_normalized.csv'
 csv = '/Users/bdd/data/fus_anes/sleep/All_PSDs_by_state_raw.csv'
+#csv = '/Users/bdd/data/fus_anes/sleep/prepost_All_PSDs_raw.csv'
+#csv = '/Users/bdd/data/fus_anes/sleep/prepost_All_PSDs_normalized.csv'
+
 sleep_data = pd.read_csv(csv, index_col=0)
 sleep_data['cond'] = sleep_data['Session'].map(grps)
 sleep_data['subj'] = sleep_data['Session'].str.slice(0,4)
 data_cols = sleep_data.columns[:-5]
+
+if 'Wake/Sleep Category' not in sleep_data.columns:
+    sleep_data['Wake/Sleep Category'] = sleep_data['Pre/Post']
 
 grouped = sleep_data.groupby(['Wake/Sleep Category', "cond"])
 sleep_data[data_cols] = 10 * np.log10(sleep_data[data_cols])
@@ -104,12 +113,14 @@ sem_df  = grouped[data_cols].sem()
 
 x = np.array(data_cols).astype(float)
 groups = sleep_data["Wake/Sleep Category"].unique()
-fig, axs = pl.subplots(1, len(groups), sharex=True, sharey=True)
-for g,ax in zip(groups, axs):
+fig, axs = pl.subplots(2, len(groups), sharex=True, sharey='row', squeeze=False)
+for idx,g in enumerate(groups):
+    hold = []
     for cond, condstr, color in zip([0, 1], ['sham', 'active'], ["tab:blue", "tab:orange"]):
         mean_curve = mean_df.loc[(g, cond)].values
         sem_curve  = sem_df.loc[(g, cond)].values
         
+        ax = axs[0, idx]
         ax.plot(x, mean_curve, label=f"{condstr}", color=color, lw=0.5)
         ax.fill_between(
             x,
@@ -120,8 +131,14 @@ for g,ax in zip(groups, axs):
             lw=0,
         )
         ax.set_title(g)
-ax.legend()
-axs[0].set_ylabel('Power (dB)')
-axs[1].set_xlabel('Frequency (Hz)')
-    
+        ax.legend()
+
+        hold.append([cond,mean_curve])
+    ax = axs[1, idx]
+    ax.plot(x, hold[1][1] - hold[0][1], color='k')
+    ax.set_xlabel('Frequency (Hz)')
+    ax.set_ylabel('active-sham power')
+axs[0,0].set_ylabel('Power (dB)')
+axs[1,1].set_xlabel('Frequency (Hz)')
+   
 ##
